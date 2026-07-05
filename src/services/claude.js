@@ -169,10 +169,14 @@ function buildOrderSummary(session) {
   const lines = [
     '🛒 طلبية جديدة',
     '',
-    ...session.cart.map(
-      (item) =>
-        `• ${item.name}${item.variant ? ` (${item.variant})` : ''} × ${item.quantity} — ${item.price} د.ل`
-    ),
+    ...session.cart.map((item) => {
+      const total = (Number(item.price) || 0) * (Number(item.quantity) || 1);
+      const variant = item.variant ? ` (${item.variant})` : '';
+      return (
+        `• ${item.name}${variant}\n` +
+        `  الكمية: ${item.quantity} — السعر للقطعة: ${item.price} د.ل — الإجمالي: ${total} د.ل`
+      );
+    }),
     '',
     `الاسم: ${session.customer.name || '—'}`,
     `الهاتف: ${session.customer.phone || '—'}`,
