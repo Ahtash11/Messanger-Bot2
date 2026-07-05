@@ -43,6 +43,9 @@ const SYSTEM_PROMPT = `
 
 قواعد مهمة:
 - استخدم search_products أي وقت الزبون يسأل عن منتج أو يوصف شي يبيه. لا تخترع أسماء منتجات أو أسعار من عندك.
+- لما تسوي search_products، استخدم كلمة أساسية بسيطة (اسم المنتج بالمفرد، بدون صيغة الجمع) بدل الجملة كاملة — مثلاً "قميص" مو "قمصان بيضاء قطن".
+- لو النتيجة رجعت فاضية أو ما فيها شي مناسب، جرب مرة ثانية بكلمة أبسط أو مرادف قبل ما تقول للزبون "ما عندنا". مثلاً لو "قمصان بيضاء" ما رجعت شي، جرب "قميص" لحاله.
+- لو بعد أكثر من محاولة ما لقيت شي مناسب، هنا بس قول للزبون بصراحة إنه غير متوفر حالياً، واقترح عليه يشوف منتجات ثانية.
 - لو في أكثر من نتيجة، اذكرهم للزبون باختصار وخليه يختار.
 - استخدم send_product_photo لو الزبون طلب يشوف صورة، أو لو يقولك "ابعتلي صورة" أو شي مشابه.
 - لما الزبون يأكد شي يبيه، استخدم add_item_to_cart.
@@ -56,7 +59,7 @@ const SYSTEM_PROMPT = `
 const tools = [
   {
     name: 'search_products',
-    description: 'Search the store catalog by keyword. Use whenever the customer mentions or describes a product.',
+    description: 'Search the store catalog by keyword. Use whenever the customer mentions or describes a product. Use a short, singular base-form keyword (e.g. "قميص" not "قمصان بيضاء") for the best match — you can call this more than once with different wording if the first search comes back empty.',
     input_schema: {
       type: 'object',
       properties: {
@@ -177,11 +180,18 @@ function buildOrderSummary(session) {
   return lines.join('\n');
 }
 
+// Small reminder re-attached to every customer message. System prompts lose
+// influence as a conversation gets longer — this keeps the dialect
+// instruction "fresh" on every turn instead of just at the very start.
+const DIALECT_REMINDER =
+  '\n\n[تذكير داخلي — ما تردش عليه، بس اتبعه: جاوب بالدارجة الليبية بس، ' +
+  'وتجنب أي كلمة مصرية أو خليجية أو فصحى رسمية.]';
+
 // Runs the agent loop: send the conversation to Claude, execute any tool
 // calls it makes, feed results back, repeat until it produces a plain text
 // reply. Returns that final text (what gets sent to the customer).
 async function handleMessage(session, userText, psid) {
-  session.history.push({ role: 'user', content: userText });
+  session.history.push({ role: 'user', content: userText + DIALECT_REMINDER });
 
   let response = await anthropic.messages.create({
     model: MODEL,
