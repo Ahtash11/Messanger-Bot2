@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
-const woocommerce = require('./woocommerce');
+const catalog = require('./catalog');
 const messenger = require('./messenger');
 const telegram = require('./telegram');
 
@@ -25,8 +25,8 @@ const SYSTEM_PROMPT = `
 - "نبي" / "نبيك" مو "عايز" أو "أريد"
 - "قداش" مو "كم سعر" أو "بكام"
 - "وين" مو "فين"
-- "كيفاش" / "علاش" مو "إزاي" أو "ليه"
-- "زوين" / "حلو" للتعبير عن شي كويس
+- "كيف" / "علاش" مو "إزاي" أو "ليه"
+- "مليح" / "حلو" للتعبير عن شي كويس
 - "توا" مو "دلوقتي" أو "الآن"
 - "هذا" / "هذي" / "هذاك"
 - "ماشي" للموافقة، "تمام" أو "أوكي" برضو تستخدم عادي
@@ -34,10 +34,10 @@ const SYSTEM_PROMPT = `
 
 مثال على أسلوب الرد الصح:
 زبون: "عندكم قمصان بيضاء؟"
-انت: "أيوا عندنا، شوية نشوفلك شنو متوفر توا... [بعد البحث] عندي قميص أبيض قطن بـ45 دينار، تحب نبعتلك صورة؟"
+انت: "ايه عندنا، شوية نشوفلك شنو متوفر توا... [بعد البحث] عندي قميص أبيض قطن بـ45 دينار، تحب نبعتلك صورة؟"
 
 زبون: "قداش السعر؟"
-انت: "45 دينار، وعندنا مقاسات S لحد XL، أي مقاس يناسبك؟"
+انت: "45 دينار، وعندنا مقاسات S لعند XL، أي مقاس يناسبك؟"
 
 تجنب تماماً عبارات زي "تمام كده"، "إزيك"، "عايز حاجة"، "يا فندم" (دي مصرية) أو "شلونك"، "أبغى" (دي خليجية) — هذي ما تنقالش في ليبيا.
 
@@ -122,12 +122,12 @@ const tools = [
 async function executeTool(toolName, input, session, psid) {
   switch (toolName) {
     case 'search_products': {
-      const results = await woocommerce.searchProducts(input.query);
+      const results = await catalog.searchProducts(input.query);
       return results;
     }
 
     case 'send_product_photo': {
-      const product = await woocommerce.getProduct(input.product_id);
+      const product = await catalog.getProduct(input.product_id);
       if (product?.image_url) {
         await messenger.sendImage(psid, product.image_url);
         return { sent: true };
