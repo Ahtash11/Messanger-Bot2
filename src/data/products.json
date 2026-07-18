@@ -1,0 +1,20 @@
+[
+  {
+    "id": "REPLACE_WITH_REAL_DARB_PRODUCT_ID_1",
+    "name": "قميص أبيض قطن",
+    "price": "45",
+    "image_url": "https://yourimagehost.com/white-shirt.jpg",
+    "description": "قميص قطن أبيض، مقاسات S لحد XL",
+    "keywords": ["شيرت", "قميص كاجوال"],
+    "variants": [{ "name": "Size", "options": ["S", "M", "L", "XL"] }]
+  },
+  {
+    "id": "REPLACE_WITH_REAL_DARB_PRODUCT_ID_2",
+    "name": "بنطلون جينز أزرق",
+    "price": "60",
+    "image_url": "https://yourimagehost.com/blue-jeans.jpg",
+    "description": "جينز أزرق كلاسيك",
+    "keywords": ["بنطرون", "جين"],
+    "variants": [{ "name": "Size", "options": ["30", "32", "34", "36"] }]
+  }
+]
