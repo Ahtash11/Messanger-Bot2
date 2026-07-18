@@ -58,7 +58,8 @@ function searchManual(query) {
   if (tokens.length === 0) return products;
 
   return products.filter((p) => {
-    const haystack = `${p.name} ${p.description || ''}`.toLowerCase();
+    const keywords = (p.keywords || []).join(' ');
+    const haystack = `${p.name} ${p.description || ''} ${keywords}`.toLowerCase();
     return tokens.some((t) => haystack.includes(t));
   });
 }
