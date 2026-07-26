@@ -3,10 +3,18 @@ require('dotenv').config();
 const config = {
   port: process.env.PORT || 3000,
   mockCatalog: process.env.MOCK_CATALOG === 'true',
-  // 'darb' switches product lookup to Darb Assabil (manual products.json +
-  // their live stock API). Anything else falls back to woocommerce.js,
-  // which handles MOCK_CATALOG itself.
+  // 'woocommerce' uses woocommerce.js (which also handles MOCK_CATALOG
+  // internally). Anything else (including unset) uses your own managed
+  // inventory system — src/services/inventory.js + src/data/products.json —
+  // which supports live stock tracking and auto-decrementing on order.
   catalogSource: process.env.CATALOG_SOURCE || null,
+
+  // Where the LIVE, WRITABLE inventory file lives. In production this
+  // should point at a Railway Volume mount path (e.g. /data/products.json)
+  // so stock changes survive redeploys. If unset, falls back to the
+  // bundled src/data/products.json — fine for local testing, but writes
+  // there will be lost on redeploy since that file is only a seed/template.
+  inventoryFilePath: process.env.INVENTORY_FILE_PATH || null,
 
   messenger: {
     pageAccessToken: process.env.PAGE_ACCESS_TOKEN,
@@ -37,13 +45,6 @@ const config = {
     consumerKey: process.env.WOOCOMMERCE_CONSUMER_KEY,
     consumerSecret: process.env.WOOCOMMERCE_CONSUMER_SECRET,
   },
-
-  darb: {
-    baseUrl: 'https://v2.sabil.ly',
-    apiKey: process.env.DARB_API_KEY,
-    accountId: process.env.DARB_ACCOUNT_ID,
-    warehouseId: process.env.DARB_WAREHOUSE_ID, // optional
-  },
 };
 
 // Fail loudly at startup rather than mysteriously later
@@ -53,19 +54,13 @@ function assertConfigured() {
     ['VERIFY_TOKEN', config.messenger.verifyToken],
     ['ANTHROPIC_API_KEY', config.anthropic.apiKey],
     ['OPENAI_API_KEY', config.openai.apiKey],
-    ...(config.mockCatalog || config.catalogSource === 'darb'
+    ...(config.mockCatalog || config.catalogSource !== 'woocommerce'
       ? []
       : [
           ['WOOCOMMERCE_URL', config.woocommerce.url],
           ['WOOCOMMERCE_CONSUMER_KEY', config.woocommerce.consumerKey],
           ['WOOCOMMERCE_CONSUMER_SECRET', config.woocommerce.consumerSecret],
         ]),
-    ...(config.catalogSource === 'darb'
-      ? [
-          ['DARB_API_KEY', config.darb.apiKey],
-          ['DARB_ACCOUNT_ID', config.darb.accountId],
-        ]
-      : []),
     ['TELEGRAM_BOT_TOKEN', config.telegram.botToken],
     ['TELEGRAM_OWNER_CHAT_ID', config.telegram.ownerChatId],
   ];
@@ -76,6 +71,14 @@ function assertConfigured() {
     console.warn(
       `⚠️  Missing environment variables: ${missing.join(', ')}\n` +
       `The bot will start but related features will fail until these are set in .env`
+    );
+  }
+
+  if (!config.mockCatalog && config.catalogSource !== 'woocommerce' && !config.inventoryFilePath) {
+    console.warn(
+      '⚠️  INVENTORY_FILE_PATH is not set — using the bundled src/data/products.json ' +
+      'directly. Stock changes (from orders) will be LOST on every redeploy. Set up a ' +
+      'Railway Volume and point INVENTORY_FILE_PATH at it before going live.'
     );
   }
 }
