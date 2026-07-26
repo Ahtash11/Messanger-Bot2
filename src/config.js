@@ -10,6 +10,11 @@ const config = {
   // there will be lost on redeploy since that file is only a seed/template.
   inventoryFilePath: process.env.INVENTORY_FILE_PATH || null,
 
+  // Optional — set any random string, then visit /debug/inventory?key=that_string
+  // in your browser to see the live, current stock numbers directly.
+  // Leave unset and the endpoint is open to anyone who finds the URL.
+  debugKey: process.env.DEBUG_KEY || null,
+
   messenger: {
     pageAccessToken: process.env.PAGE_ACCESS_TOKEN,
     verifyToken: process.env.VERIFY_TOKEN,
