@@ -1,6 +1,7 @@
 const express = require('express');
 const { config, assertConfigured } = require('./config');
 const { router: webhookRouter, verifySignature } = require('./routes/webhook');
+const adminRouter = require('./routes/admin');
 
 assertConfigured();
 
@@ -25,6 +26,7 @@ app.get('/debug/inventory', (req, res) => {
 });
 
 app.use('/webhook', webhookRouter);
+app.use('/admin', adminRouter);
 
 app.listen(config.port, () => {
   console.log(`Server listening on port ${config.port}`);
