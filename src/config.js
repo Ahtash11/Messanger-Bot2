@@ -2,12 +2,6 @@ require('dotenv').config();
 
 const config = {
   port: process.env.PORT || 3000,
-  mockCatalog: process.env.MOCK_CATALOG === 'true',
-  // 'woocommerce' uses woocommerce.js (which also handles MOCK_CATALOG
-  // internally). Anything else (including unset) uses your own managed
-  // inventory system — src/services/inventory.js + src/data/products.json —
-  // which supports live stock tracking and auto-decrementing on order.
-  catalogSource: process.env.CATALOG_SOURCE || null,
 
   // Where the LIVE, WRITABLE inventory file lives. In production this
   // should point at a Railway Volume mount path (e.g. /data/products.json)
@@ -39,12 +33,6 @@ const config = {
     name: process.env.STORE_NAME || 'المحل',
     description: process.env.STORE_DESCRIPTION || 'محل تجارة إلكترونية',
   },
-
-  woocommerce: {
-    url: process.env.WOOCOMMERCE_URL,
-    consumerKey: process.env.WOOCOMMERCE_CONSUMER_KEY,
-    consumerSecret: process.env.WOOCOMMERCE_CONSUMER_SECRET,
-  },
 };
 
 // Fail loudly at startup rather than mysteriously later
@@ -54,13 +42,6 @@ function assertConfigured() {
     ['VERIFY_TOKEN', config.messenger.verifyToken],
     ['ANTHROPIC_API_KEY', config.anthropic.apiKey],
     ['OPENAI_API_KEY', config.openai.apiKey],
-    ...(config.mockCatalog || config.catalogSource !== 'woocommerce'
-      ? []
-      : [
-          ['WOOCOMMERCE_URL', config.woocommerce.url],
-          ['WOOCOMMERCE_CONSUMER_KEY', config.woocommerce.consumerKey],
-          ['WOOCOMMERCE_CONSUMER_SECRET', config.woocommerce.consumerSecret],
-        ]),
     ['TELEGRAM_BOT_TOKEN', config.telegram.botToken],
     ['TELEGRAM_OWNER_CHAT_ID', config.telegram.ownerChatId],
   ];
@@ -74,7 +55,7 @@ function assertConfigured() {
     );
   }
 
-  if (!config.mockCatalog && config.catalogSource !== 'woocommerce' && !config.inventoryFilePath) {
+  if (!config.inventoryFilePath) {
     console.warn(
       '⚠️  INVENTORY_FILE_PATH is not set — using the bundled src/data/products.json ' +
       'directly. Stock changes (from orders) will be LOST on every redeploy. Set up a ' +
