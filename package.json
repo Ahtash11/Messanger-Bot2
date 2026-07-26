@@ -1,7 +1,7 @@
 {
   "name": "messenger-order-bot",
   "version": "1.0.0",
-  "description": "Messenger DM order-taking bot with Libyan dialect chat, voice notes, product photos, and WhatsApp order summaries",
+  "description": "Messenger DM order-taking bot with Libyan dialect chat, voice notes, product photos, and Telegram order summaries",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
