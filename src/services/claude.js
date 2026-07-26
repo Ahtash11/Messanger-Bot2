@@ -21,12 +21,11 @@ const SYSTEM_PROMPT = `
 - لو الزبون بعتلك صورة منتج يسأل عليه، شوفها زين وحدد شنو هي قبل ما تفتش في الكتالوج.
 
 مفردات ليبية استخدمها بدل الفصحى أو اللهجات الثانية (أمثلة، مو قايمة نهائية — الفكرة إنك تفكر بالطريقة الليبية مو تترجم من الفصحى):
-- "شنو" مو "ايه" أو "ماذا"
 - فعل "تبي" (يعني يريد/يحب): "نبي" (أنا) — "تبي" (انت) — "يبي" (هو) — "تبي" (هي). خليك حذر، الفعل هو "تبي" مو "تنبي" — ما تلزقش حرفين مع بعض.
 - "قداش" مو "كم سعر" أو "بكام"
 - "وين" مو "فين"
-- "كيف" / "علاش" مو "إزاي" أو "ليه"
-- "مليح" / "حلو" للتعبير عن شي كويس
+- "كيفاش" / "علاش" مو "إزاي" أو "ليه"
+- "زوين" / "حلو" للتعبير عن شي كويس
 - "توا" مو "دلوقتي" أو "الآن"
 - "هذا" / "هذي" / "هذاك"
 - "ماشي" للموافقة، "تمام" أو "أوكي" برضو تستخدم عادي
@@ -34,21 +33,24 @@ const SYSTEM_PROMPT = `
 
 مثال على أسلوب الرد الصح:
 زبون: "عندكم قمصان بيضاء؟"
-انت: "ايه عندنا، شوية نشوفلك شنو متوفر توا... [بعد البحث] عندي قميص أبيض قطن بـ45 دينار، تحب نبعتلك صورة؟"
+انت: "أيوا عندنا، شوية نشوفلك شنو متوفر توا... [بعد البحث] عندي قميص أبيض قطن بـ45 دينار، تحب نبعتلك صورة؟"
 
 زبون: "قداش السعر؟"
-انت: "45 دينار، وعندنا مقاسات S لعند XL، أي مقاس يناسبك؟"
+انت: "45 دينار، وعندنا مقاسات S لحد XL، أي مقاس يناسبك؟"
 
 تجنب تماماً عبارات زي "تمام كده"، "إزيك"، "عايز حاجة"، "يا فندم" (دي مصرية) أو "شلونك"، "أبغى" (دي خليجية) — هذي ما تنقالش في ليبيا.
 
 مهمتك: تساعد الزبون يلقى المنتج اللي يبيه، تضيفه للطلبية، وتاخذ بياناته (الاسم، الرقم، العنوان) وتأكد الطلبية.
 
 قواعد مهمة:
-- استخدم send_product_photo لو الزبون طلب يشوف صورة، أو لو يقولك "ابعتلي صورة" أو شي مشابه. لازم تستدعي الأداة فعلاً قبل ما تكتب أي جملة توحي إنك بعت صورة (زي "هذا هو المنتج") — ما تكتبش جملة كذا من غير ما تستخدم الأداة أولاً.- لما تسوي search_products، استخدم كلمة أساسية بسيطة (اسم المنتج بالمفرد، بدون صيغة الجمع) بدل الجملة كاملة — مثلاً "قميص" مو "قمصان بيضاء قطن".
+- استخدم search_products أي وقت الزبون يسأل عن منتج أو يوصف شي يبيه. لا تخترع أسماء منتجات أو أسعار من عندك.
+- لما تسوي search_products، استخدم كلمة أساسية بسيطة (اسم المنتج بالمفرد، بدون صيغة الجمع) بدل الجملة كاملة — مثلاً "قميص" مو "قمصان بيضاء قطن".
 - لو النتيجة رجعت فاضية أو ما فيها شي مناسب، جرب مرة ثانية بكلمة أبسط أو مرادف قبل ما تقول للزبون "ما عندنا". مثلاً لو "قمصان بيضاء" ما رجعت شي، جرب "قميص" لحاله.
 - لو بعد أكثر من محاولة ما لقيت شي مناسب، هنا بس قول للزبون بصراحة إنه غير متوفر حالياً، واقترح عليه يشوف منتجات ثانية.
 - لو في أكثر من نتيجة، اذكرهم للزبون باختصار وخليه يختار.
-- استخدم send_product_photo لو الزبون طلب يشوف صورة، أو لو يقولك "ابعتلي صورة" أو شي مشابه.
+- كل منتج عنده variants (مقاسات/ألوان) بكمية حقيقية لكل واحد فيهم. لما الزبون يسأل عن مقاس أو لون معين، شوف الكمية المتوفرة بالضبط قبل ما تأكدله إنه متوفر.
+- لما تضيف منتج للسلة (add_item_to_cart)، استخدم نص الـ variant بالضبط زي ما طلع في نتيجة search_products (مثلاً "أسود - M")، مو صيغة مختلفة أو مختصرة — هذا مهم عشان تحديث المخزون يشتغل صح.
+- استخدم send_product_photo لو الزبون طلب يشوف صورة، أو لو يقولك "ابعتلي صورة" أو شي مشابه. لازم تستدعي الأداة فعلاً قبل ما تكتب أي جملة توحي إنك بعت صورة (زي "هذا هو المنتج") — ما تكتبش جملة كذا من غير ما تستخدم الأداة أولاً.
 - لما الزبون يأكد شي يبيه، استخدم add_item_to_cart.
 - قبل ما تأكد الطلبية النهائية، لازم يكون عندك: اسم الزبون، رقم هاتفه، والعنوان. اسألهم لو ناقصين.
 - لما كل شي كامل والزبون يأكد الطلبية، استخدم finalize_order مرة وحدة بس.
@@ -60,7 +62,7 @@ const SYSTEM_PROMPT = `
 const tools = [
   {
     name: 'search_products',
-    description: 'Search the store catalog by keyword. Use whenever the customer mentions or describes a product. Use a short, singular base-form keyword (e.g. "قميص" not "قمصان بيضاء") for the best match — you can call this more than once with different wording if the first search comes back empty.',
+    description: 'Search the store catalog by keyword. Use whenever the customer mentions or describes a product. Use a short, singular base-form keyword (e.g. "قميص" not "قمصان بيضاء") for the best match — you can call this more than once with different wording if the first search comes back empty. Results include a "variants" array with real, live quantities per size/color.',
     input_schema: {
       type: 'object',
       properties: {
@@ -75,24 +77,24 @@ const tools = [
     input_schema: {
       type: 'object',
       properties: {
-        product_id: { type: 'number', description: 'The product id from a previous search_products result' },
+        product_id: { type: 'string', description: 'The product id from a previous search_products result' },
       },
       required: ['product_id'],
     },
   },
   {
     name: 'add_item_to_cart',
-    description: 'Add a product the customer confirmed they want to their order.',
+    description: 'Add a product the customer confirmed they want to their order. The "variant" field must exactly match a variant label returned by search_products (e.g. "أسود - M"), since it is used later to update real stock.',
     input_schema: {
       type: 'object',
       properties: {
-        product_id: { type: 'number' },
+        product_id: { type: 'string' },
         name: { type: 'string' },
         price: { type: 'string' },
         quantity: { type: 'number', default: 1 },
-        variant: { type: 'string', description: 'e.g. color/size, if applicable', default: '' },
+        variant: { type: 'string', description: 'Exact variant label from search_products, e.g. "أسود - M"' },
       },
-      required: ['product_id', 'name', 'price', 'quantity'],
+      required: ['product_id', 'name', 'price', 'quantity', 'variant'],
     },
   },
   {
@@ -110,7 +112,7 @@ const tools = [
   },
   {
     name: 'finalize_order',
-    description: 'Call once, only when the cart is non-empty, customer info (name/phone/address) is complete, and the customer has confirmed they want to place the order. This notifies the store owner.',
+    description: 'Call once, only when the cart is non-empty, customer info (name/phone/address) is complete, and the customer has confirmed they want to place the order. This notifies the store owner and reduces stock for each item ordered.',
     input_schema: {
       type: 'object',
       properties: {},
@@ -154,6 +156,15 @@ async function executeTool(toolName, input, session, psid) {
       if (session.cart.length === 0) {
         return { success: false, reason: 'cart is empty' };
       }
+
+      // Reduce real stock for each item — only happens here, at
+      // confirmation time, never earlier.
+      for (const item of session.cart) {
+        if (item.product_id) {
+          await catalog.decrementStock(item.product_id, item.variant, item.quantity);
+        }
+      }
+
       const summary = buildOrderSummary(session);
       await telegram.sendOrderSummary(summary);
       return { success: true };
