@@ -121,4 +121,4 @@ function decrementStock(productId, variantLabel, quantity) {
   });
 }
 
-module.exports = { searchProducts, getProduct, decrementStock };
+module.exports = { searchProducts, getProduct, decrementStock, getRawInventory: loadProducts };
