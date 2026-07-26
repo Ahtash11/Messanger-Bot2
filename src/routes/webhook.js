@@ -8,7 +8,6 @@ const messenger = require('../services/messenger');
 
 const router = express.Router();
 
-// ── Webhook verification (Meta calls this once when you save the webhook URL) ──
 router.get('/', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -20,7 +19,6 @@ router.get('/', (req, res) => {
   return res.sendStatus(403);
 });
 
-// ── Incoming messages ──────────────────────────────────
 router.post('/', async (req, res) => {
   res.status(200).send('EVENT_RECEIVED');
 
