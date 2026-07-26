@@ -121,4 +121,55 @@ function decrementStock(productId, variantLabel, quantity) {
   });
 }
 
-module.exports = { searchProducts, getProduct, decrementStock, getRawInventory: loadProducts };
+// Adds a brand new product to the live inventory. Returns
+// { success: true } or { success: false, reason } (e.g. duplicate id).
+function addProduct(newProduct) {
+  const products = loadProducts();
+
+  if (products.some((p) => String(p.id) === String(newProduct.id))) {
+    return Promise.resolve({ success: false, reason: 'a product with this ID already exists' });
+  }
+
+  products.push(newProduct);
+  const saved = saveProducts(products);
+  return Promise.resolve({ success: saved });
+}
+
+// Replaces a product's editable fields (name/price/image/description/
+// keywords/variants) entirely. Used by the admin edit page — the variants
+// array passed in fully replaces the old one, so increasing a quantity
+// number is how you "add pieces" to existing stock, and adding a new
+// line is how you add a new size/color to an existing product.
+function updateProduct(id, updates) {
+  const products = loadProducts();
+  const product = products.find((p) => String(p.id) === String(id));
+  if (!product) {
+    return Promise.resolve({ success: false, reason: 'product not found' });
+  }
+
+  Object.assign(product, updates);
+  const saved = saveProducts(products);
+  return Promise.resolve({ success: saved });
+}
+
+function deleteProduct(id) {
+  const products = loadProducts();
+  const index = products.findIndex((p) => String(p.id) === String(id));
+  if (index === -1) {
+    return Promise.resolve({ success: false, reason: 'product not found' });
+  }
+
+  products.splice(index, 1);
+  const saved = saveProducts(products);
+  return Promise.resolve({ success: saved });
+}
+
+module.exports = {
+  searchProducts,
+  getProduct,
+  decrementStock,
+  addProduct,
+  updateProduct,
+  deleteProduct,
+  getRawInventory: loadProducts,
+};
