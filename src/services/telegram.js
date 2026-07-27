@@ -1,17 +1,21 @@
 const axios = require('axios');
 const { config } = require('../config');
 
-async function sendOrderSummary(summaryText) {
+async function sendMessage(chatId, text) {
   const url = `https://api.telegram.org/bot${config.telegram.botToken}/sendMessage`;
 
   try {
     await axios.post(url, {
-      chat_id: config.telegram.ownerChatId,
-      text: summaryText,
+      chat_id: chatId,
+      text,
     });
   } catch (err) {
     console.error('Telegram send error:', err.response?.data || err.message);
   }
 }
 
-module.exports = { sendOrderSummary };
+async function sendOrderSummary(summaryText) {
+  return sendMessage(config.telegram.ownerChatId, summaryText);
+}
+
+module.exports = { sendMessage, sendOrderSummary };
