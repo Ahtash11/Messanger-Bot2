@@ -24,6 +24,10 @@ const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
     ownerChatId: process.env.TELEGRAM_OWNER_CHAT_ID,
+    // Set via @BotFather-independent random string you choose, then use it
+    // when calling Telegram's setWebhook (see README) — Telegram echoes it
+    // back on every real webhook call so we can verify authenticity.
+    webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || null,
   },
 
   anthropic: {
