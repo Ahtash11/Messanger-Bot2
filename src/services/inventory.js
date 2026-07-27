@@ -57,9 +57,6 @@ function toBotShape(product) {
     in_stock: inStockVariants.length > 0,
     image_url: product.image_url || null,
     short_description: product.description || '',
-    // Full variant list with live quantities — lets Claude answer "is size
-    // M available?" precisely, and tells it exactly which variant labels
-    // are valid to pass to add_item_to_cart.
     variants: product.variants || [],
   };
 }
@@ -90,10 +87,7 @@ function getProduct(productId) {
 }
 
 // Reduces stock for one specific product+variant by `quantity`, floored at
-// 0. Returns { success: true, remaining } or { success: false, reason }.
-// This is called once per cart item when an order is finalized — never
-// earlier — so browsing/adding-to-cart mid-conversation never reserves
-// stock a customer hasn't actually committed to buying.
+// 0. Called once per cart item when a customer order is finalized.
 function decrementStock(productId, variantLabel, quantity) {
   const products = loadProducts();
   const product = products.find((p) => String(p.id) === String(productId));
@@ -103,9 +97,6 @@ function decrementStock(productId, variantLabel, quantity) {
 
   const variant = (product.variants || []).find((v) => v.label === variantLabel);
   if (!variant) {
-    // Don't block the order over this — the order is already confirmed and
-    // the owner gets notified via Telegram regardless. Just log it so the
-    // shop owner/developer notices stock wasn't auto-adjusted for this item.
     console.warn(
       `Inventory: could not find variant "${variantLabel}" for product "${productId}" — stock not adjusted`
     );
@@ -114,15 +105,77 @@ function decrementStock(productId, variantLabel, quantity) {
 
   variant.quantity = Math.max(0, (variant.quantity || 0) - (quantity || 1));
   const saved = saveProducts(products);
-
-  return Promise.resolve({
-    success: saved,
-    remaining: variant.quantity,
-  });
+  return Promise.resolve({ success: saved, remaining: variant.quantity });
 }
 
-// Adds a brand new product to the live inventory. Returns
-// { success: true } or { success: false, reason } (e.g. duplicate id).
+// Increases or decreases one variant's quantity by `delta` (negative to
+// reduce). If the variant doesn't exist and delta is positive, it's created
+// — this is how a new size/color gets added to an existing product via the
+// admin chat. Floored at 0.
+function adjustStock(productId, variantLabel, delta) {
+  const products = loadProducts();
+  const product = products.find((p) => String(p.id) === String(productId));
+  if (!product) {
+    return Promise.resolve({ success: false, reason: 'product not found' });
+  }
+
+  product.variants = product.variants || [];
+  let variant = product.variants.find((v) => v.label === variantLabel);
+
+  if (!variant) {
+    if (delta <= 0) {
+      return Promise.resolve({ success: false, reason: 'variant not found' });
+    }
+    variant = { label: variantLabel, quantity: 0 };
+    product.variants.push(variant);
+  }
+
+  variant.quantity = Math.max(0, (variant.quantity || 0) + delta);
+  const saved = saveProducts(products);
+  return Promise.resolve({ success: saved, remaining: variant.quantity });
+}
+
+// Sets a variant's quantity to an exact number — creates it if missing.
+function setStock(productId, variantLabel, quantity) {
+  const products = loadProducts();
+  const product = products.find((p) => String(p.id) === String(productId));
+  if (!product) {
+    return Promise.resolve({ success: false, reason: 'product not found' });
+  }
+
+  product.variants = product.variants || [];
+  let variant = product.variants.find((v) => v.label === variantLabel);
+  if (!variant) {
+    variant = { label: variantLabel, quantity: 0 };
+    product.variants.push(variant);
+  }
+  variant.quantity = Math.max(0, quantity || 0);
+
+  const saved = saveProducts(products);
+  return Promise.resolve({ success: saved, remaining: variant.quantity });
+}
+
+// Removes one specific size/color option from a product entirely (not the
+// whole product — use deleteProduct for that).
+function deleteVariant(productId, variantLabel) {
+  const products = loadProducts();
+  const product = products.find((p) => String(p.id) === String(productId));
+  if (!product) {
+    return Promise.resolve({ success: false, reason: 'product not found' });
+  }
+
+  const before = (product.variants || []).length;
+  product.variants = (product.variants || []).filter((v) => v.label !== variantLabel);
+  if (product.variants.length === before) {
+    return Promise.resolve({ success: false, reason: 'variant not found' });
+  }
+
+  const saved = saveProducts(products);
+  return Promise.resolve({ success: saved });
+}
+
+// Adds a brand new product. Returns { success: true } or
+// { success: false, reason } (e.g. duplicate id).
 function addProduct(newProduct) {
   const products = loadProducts();
 
@@ -135,11 +188,10 @@ function addProduct(newProduct) {
   return Promise.resolve({ success: saved });
 }
 
-// Replaces a product's editable fields (name/price/image/description/
-// keywords/variants) entirely. Used by the admin edit page — the variants
-// array passed in fully replaces the old one, so increasing a quantity
-// number is how you "add pieces" to existing stock, and adding a new
-// line is how you add a new size/color to an existing product.
+// Merges partial updates into an existing product (only overwrites the
+// fields you pass in). Used for both the web admin edit form (which passes
+// everything including a full variants replacement) and the chat admin
+// agent (which typically only updates a field like price or name).
 function updateProduct(id, updates) {
   const products = loadProducts();
   const product = products.find((p) => String(p.id) === String(id));
@@ -164,12 +216,31 @@ function deleteProduct(id) {
   return Promise.resolve({ success: saved });
 }
 
+// Compact list for the admin chat agent to reference by name/id without
+// pulling every variant of every product into context each time.
+function listProducts() {
+  const products = loadProducts();
+  return Promise.resolve(
+    products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      total_quantity: (p.variants || []).reduce((s, v) => s + (v.quantity || 0), 0),
+      variant_count: (p.variants || []).length,
+    }))
+  );
+}
+
 module.exports = {
   searchProducts,
   getProduct,
   decrementStock,
+  adjustStock,
+  setStock,
+  deleteVariant,
   addProduct,
   updateProduct,
   deleteProduct,
+  listProducts,
   getRawInventory: loadProducts,
 };
