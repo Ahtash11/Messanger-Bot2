@@ -1,7 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
 const inventory = require('./inventory');
-const { getSession, saveSession } = require('./session');
+const { getSession, saveSession, resetSession } = require('./session');
 
 const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
 
@@ -27,6 +27,7 @@ const SYSTEM_PROMPT = `
 - استخدم delete_variant لمسح مقاس/لون معين بس.
 - قبل ما تستخدم delete_product (مسح منتج كامل)، لازم تأكد معاه أول مرة ("متأكد تبي تمسح [اسم المنتج] بالكامل؟") وما تنفذش إلا لو أكدلك صراحة.
 - بعد أي عملية، لخصله شنو صار بجملة وحدة أو جملتين، بدون تفاصيل تقنية.
+- لو صاحب المحل طلب يضيف أكثر من منتج في نفس الرسالة (مثلاً "أضيفهم كلهم مع بعض")، ضيفهم واحد واحد لكن ما تحاولش ترد بملخص طويل عن كلهم في نفس الرسالة — أضف أول منتج، أكدله بجملة قصيرة، وانتظر يقول "كمل" أو يبعت البقية قبل ما تكمل، إلا لو كانت القايمة قصيرة (منتجين ثلاثة بس).
 
 رد دايما كإنسان عادي، بدون JSON أو أكواد في ردك النهائي.
 `.trim();
@@ -154,13 +155,23 @@ async function executeTool(toolName, input) {
   }
 }
 
+const RESET_COMMANDS = ['reset', 'ابدأ من جديد', 'أعد البداية', 'restart'];
+
 async function handleAdminMessage(userText) {
+  // Manual escape hatch — if the conversation ever gets stuck (e.g. a
+  // response got cut off mid-tool-call), the owner can type this instead
+  // of needing a Railway restart.
+  if (RESET_COMMANDS.includes(userText.trim().toLowerCase())) {
+    resetSession(OWNER_SESSION_KEY);
+    return 'تم مسح الذاكرة، ابدأ من جديد.';
+  }
+
   const session = getSession(OWNER_SESSION_KEY);
   session.history.push({ role: 'user', content: userText });
 
   let response = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 4096,
     system: SYSTEM_PROMPT,
     tools,
     messages: session.history,
@@ -169,10 +180,20 @@ async function handleAdminMessage(userText) {
   while (response.stop_reason === 'tool_use') {
     session.history.push({ role: 'assistant', content: response.content });
 
+    // Every tool_use block MUST get a matching tool_result, even if the
+    // tool throws — otherwise the conversation history becomes permanently
+    // invalid and every future message fails, with no way to recover short
+    // of clearing the whole conversation.
     const toolResults = [];
     for (const block of response.content) {
       if (block.type === 'tool_use') {
-        const result = await executeTool(block.name, block.input);
+        let result;
+        try {
+          result = await executeTool(block.name, block.input);
+        } catch (err) {
+          console.error(`Admin tool "${block.name}" failed:`, err);
+          result = { success: false, reason: `internal error: ${err.message || 'unknown'}` };
+        }
         toolResults.push({
           type: 'tool_result',
           tool_use_id: block.id,
@@ -182,14 +203,24 @@ async function handleAdminMessage(userText) {
     }
 
     session.history.push({ role: 'user', content: toolResults });
+    saveSession(OWNER_SESSION_KEY, session); // save progress after each resolved step
 
     response = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools,
       messages: session.history,
     });
+  }
+
+  // If the response got cut off (hit the token limit) rather than ending
+  // cleanly, DON'T save it — a truncated response can contain a half-formed
+  // tool_use block with no way to resolve it, which is exactly what
+  // corrupted the conversation before. Better to drop this turn and ask the
+  // owner to try again with a smaller request.
+  if (response.stop_reason === 'max_tokens') {
+    return 'الطلب كبير زايد، جرب تسويها على دفعات أصغر (مثلاً منتج أو منتجين في كل مرة).';
   }
 
   const finalText = response.content
