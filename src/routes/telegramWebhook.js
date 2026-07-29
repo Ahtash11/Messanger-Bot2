@@ -22,19 +22,19 @@ router.post('/', express.json(), async (req, res) => {
   const message = req.body?.message;
   if (!message || !message.text) return;
 
-  // Security layer 2: only ever process messages from YOUR chat id — a
-  // chat id alone isn't secret, so this check matters even with the
-  // secret token above. Anyone else who somehow messages this bot is
-  // silently ignored, not just unauthorized-error'd (no point telling a
-  // stranger this bot does anything interesting).
+  // Security layer 2: only ever process messages from an authorized chat id
+  // (TELEGRAM_OWNER_CHAT_IDS) — a chat id alone isn't secret, so this check
+  // matters even with the secret token above. Anyone else who somehow
+  // messages this bot is silently ignored, not just unauthorized-error'd
+  // (no point telling a stranger this bot does anything interesting).
   const senderChatId = String(message.chat?.id || '');
-  if (senderChatId !== String(config.telegram.ownerChatId)) {
+  if (!config.telegram.ownerChatIds.includes(senderChatId)) {
     console.warn(`Telegram admin webhook: ignored message from unauthorized chat id ${senderChatId}`);
     return;
   }
 
   try {
-    const reply = await handleAdminMessage(message.text);
+    const reply = await handleAdminMessage(message.text, senderChatId);
     if (reply) await sendMessage(senderChatId, reply);
   } catch (err) {
     console.error('Admin agent error:', err);

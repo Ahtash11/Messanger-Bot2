@@ -1,6 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
-const { config } = require('../config');
+const { config, getPageAccessToken } = require('../config');
 const { getSession, saveSession } = require('../services/session');
 const { handleMessage, handleImageMessage } = require('../services/claude');
 const { transcribeVoiceNote } = require('../services/whisper');
@@ -26,25 +26,37 @@ router.post('/', async (req, res) => {
   if (body.object !== 'page') return;
 
   for (const entry of body.entry || []) {
+    // entry.id is the Facebook Page this event came in on — needed to pick
+    // the right access token when running more than one Page off this same
+    // bot (they all share the same catalog/Telegram, just different
+    // Messenger credentials).
+    const pageId = entry.id;
     for (const event of entry.messaging || []) {
-      handleEvent(event).catch((err) => console.error('Error handling event:', err));
+      handleEvent(event, pageId).catch((err) => console.error('Error handling event:', err));
     }
   }
 });
 
-async function handleEvent(event) {
+async function handleEvent(event, pageId) {
   const psid = event.sender?.id;
   if (!psid || !event.message || event.message.is_echo) return;
 
-  await messenger.sendTypingOn(psid);
+  const pageAccessToken = getPageAccessToken(pageId);
+
+  await messenger.sendTypingOn(psid, pageAccessToken);
 
   const session = getSession(psid);
+  // Keep the session's page info current — a PSID is already unique per
+  // page (Facebook scopes it that way), so this never actually changes for
+  // an existing conversation, but it's cheap to just always set it.
+  session.pageId = pageId;
+  session.pageAccessToken = pageAccessToken;
 
   // This customer's conversation was escalated to the owner — stop
   // auto-responding until the owner resolves it (via the Telegram admin
   // chat's "استأنف" command), so the bot doesn't talk over a human reply.
   if (session.needsHuman) {
-    await messenger.sendText(psid, 'طلبك عند صاحب المحل يشوفه توا، شوي وبيتواصل معاك 🙏');
+    await messenger.sendText(psid, 'طلبك عند صاحب المحل يشوفه توا، شوي وبيتواصل معاك 🙏', pageAccessToken);
     return;
   }
 
@@ -56,10 +68,10 @@ async function handleEvent(event) {
       );
       const reply = await handleImageMessage(session, mediaType, base64, psid);
       saveSession(psid, session);
-      if (reply) await messenger.sendText(psid, reply);
+      if (reply) await messenger.sendText(psid, reply, pageAccessToken);
     } catch (err) {
       console.error('Image handling error:', err);
-      await messenger.sendText(psid, 'ما قدرتش نشوف الصورة زينة، تقدر تكتبلي شنو المنتج اللي تسأل عليه؟');
+      await messenger.sendText(psid, 'ما قدرتش نشوف الصورة زينة، تقدر تكتبلي شنو المنتج اللي تسأل عليه؟', pageAccessToken);
     }
     return;
   }
@@ -74,12 +86,12 @@ async function handleEvent(event) {
       try {
         userText = await transcribeVoiceNote(audioAttachment.payload.url);
         if (!userText) {
-          await messenger.sendText(psid, 'ما سمعتش زينة، تقدر تكتبها؟ 🙏');
+          await messenger.sendText(psid, 'ما سمعتش زينة، تقدر تكتبها؟ 🙏', pageAccessToken);
           return;
         }
       } catch (err) {
         console.error('Transcription error:', err);
-        await messenger.sendText(psid, 'صار مشكل في تسجيلك، تقدر تكتبها؟');
+        await messenger.sendText(psid, 'صار مشكل في تسجيلك، تقدر تكتبها؟', pageAccessToken);
         return;
       }
     }
@@ -91,7 +103,7 @@ async function handleEvent(event) {
   saveSession(psid, session);
 
   if (reply) {
-    await messenger.sendText(psid, reply);
+    await messenger.sendText(psid, reply, pageAccessToken);
   }
 }
 
