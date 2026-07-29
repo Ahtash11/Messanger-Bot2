@@ -8,9 +8,6 @@ const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
 
 const MODEL = 'claude-sonnet-4-6';
 
-// A single fixed session key — there's only ever one owner using this.
-const OWNER_SESSION_KEY = '__owner_admin__';
-
 const SYSTEM_PROMPT = `
 انت مساعد إدارة المخزون الخاص بصاحب المحل، تشتغل معاه في الشات الخاص بيه على تيليجرام — هذا مو بوت الزبائن، هذا خاص بيه بس.
 
@@ -221,9 +218,11 @@ async function executeTool(toolName, input) {
       target.needsHuman = false;
       target.humanHelpReason = null;
 
-      if (target.pinnedMessageId) {
-        await telegram.unpinMessage(config.telegram.ownerChatId, target.pinnedMessageId);
-        target.pinnedMessageId = null;
+      if (target.pinnedMessageIds) {
+        for (const [chatId, messageId] of Object.entries(target.pinnedMessageIds)) {
+          await telegram.unpinMessage(chatId, messageId);
+        }
+        target.pinnedMessageIds = {};
       }
 
       saveSession(input.psid, target);
@@ -236,16 +235,23 @@ async function executeTool(toolName, input) {
 
 const RESET_COMMANDS = ['reset', 'ابدأ من جديد', 'أعد البداية', 'restart'];
 
-async function handleAdminMessage(userText) {
+// senderChatId keys the session — each authorized person (owner, partner,
+// etc.) gets their own independent conversation thread, even though they're
+// all reading/writing the same shared inventory data underneath. This keeps
+// two people typing at around the same time from getting their messages
+// interleaved into one confusing shared history.
+async function handleAdminMessage(userText, senderChatId) {
+  const sessionKey = `admin_${senderChatId}`;
+
   // Manual escape hatch — if the conversation ever gets stuck (e.g. a
-  // response got cut off mid-tool-call), the owner can type this instead
-  // of needing a Railway restart.
+  // response got cut off mid-tool-call), typing this clears it instead of
+  // needing a Railway restart.
   if (RESET_COMMANDS.includes(userText.trim().toLowerCase())) {
-    resetSession(OWNER_SESSION_KEY);
+    resetSession(sessionKey);
     return 'تم مسح الذاكرة، ابدأ من جديد.';
   }
 
-  const session = getSession(OWNER_SESSION_KEY);
+  const session = getSession(sessionKey);
   session.history.push({ role: 'user', content: userText });
 
   let response = await anthropic.messages.create({
@@ -282,7 +288,7 @@ async function handleAdminMessage(userText) {
     }
 
     session.history.push({ role: 'user', content: toolResults });
-    saveSession(OWNER_SESSION_KEY, session); // save progress after each resolved step
+    saveSession(sessionKey, session); // save progress after each resolved step
 
     response = await anthropic.messages.create({
       model: MODEL,
@@ -309,7 +315,7 @@ async function handleAdminMessage(userText) {
     .trim();
 
   session.history.push({ role: 'assistant', content: response.content });
-  saveSession(OWNER_SESSION_KEY, session);
+  saveSession(sessionKey, session);
 
   return finalText;
 }

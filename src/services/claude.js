@@ -161,7 +161,7 @@ async function executeTool(toolName, input, session, psid) {
       }
 
       for (const url of urls) {
-        await messenger.sendImage(psid, url);
+        await messenger.sendImage(psid, url, session.pageAccessToken);
       }
       return { sent: true, count: urls.length, color: input.color || null };
     }
@@ -205,9 +205,13 @@ async function executeTool(toolName, input, session, psid) {
       session.humanHelpReason = input.reason || 'غير محدد';
 
       const alert = buildHumanHelpAlert(session, psid);
-      const messageId = await telegram.sendMessage(config.telegram.ownerChatId, alert);
-      await telegram.pinMessage(config.telegram.ownerChatId, messageId);
-      session.pinnedMessageId = messageId;
+      session.pinnedMessageIds = {};
+
+      for (const chatId of config.telegram.ownerChatIds) {
+        const messageId = await telegram.sendMessage(chatId, alert);
+        await telegram.pinMessage(chatId, messageId);
+        session.pinnedMessageIds[chatId] = messageId;
+      }
 
       return { success: true };
     }

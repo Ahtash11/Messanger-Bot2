@@ -21,6 +21,11 @@ function getSession(psid) {
       // auto-responding to this customer until the owner resolves it.
       needsHuman: false,
       humanHelpReason: null,
+      // Which Facebook Page (and its access token) this conversation
+      // belongs to — set on every incoming message in webhook.js, since a
+      // multi-page setup needs the right token to reply on the right page.
+      pageId: null,
+      pageAccessToken: null,
     });
   }
   return sessions.get(psid);

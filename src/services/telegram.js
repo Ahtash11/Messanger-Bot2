@@ -42,7 +42,7 @@ async function unpinMessage(chatId, messageId) {
 }
 
 async function sendOrderSummary(summaryText) {
-  return sendMessage(config.telegram.ownerChatId, summaryText);
+  return Promise.all(config.telegram.ownerChatIds.map((chatId) => sendMessage(chatId, summaryText)));
 }
 
 module.exports = { sendMessage, sendOrderSummary, pinMessage, unpinMessage };
