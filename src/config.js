@@ -16,14 +16,42 @@ const config = {
   debugKey: process.env.DEBUG_KEY || null,
 
   messenger: {
+    // Single-page setups: just set PAGE_ACCESS_TOKEN as before, nothing
+    // else needed.
+    //
+    // Multi-page setups: set PAGE_ACCESS_TOKENS instead (plural), formatted
+    // as "pageId:token,pageId:token,..." — one pair per Facebook Page you
+    // want this same bot running on. Every page shares the same catalog,
+    // Telegram alerts, and admin chat; only the "which token do I reply
+    // with" part differs per page.
     pageAccessToken: process.env.PAGE_ACCESS_TOKEN,
+    pageAccessTokens: (process.env.PAGE_ACCESS_TOKENS || '')
+      .split(',')
+      .map((pair) => pair.trim())
+      .filter(Boolean)
+      .reduce((map, pair) => {
+        const idx = pair.indexOf(':');
+        if (idx === -1) return map;
+        const pageId = pair.slice(0, idx).trim();
+        const token = pair.slice(idx + 1).trim();
+        if (pageId && token) map[pageId] = token;
+        return map;
+      }, {}),
     verifyToken: process.env.VERIFY_TOKEN,
     appSecret: process.env.APP_SECRET,
   },
 
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
-    ownerChatId: process.env.TELEGRAM_OWNER_CHAT_ID,
+    // Supports multiple people (comma-separated chat ids), e.g.
+    // TELEGRAM_OWNER_CHAT_IDS=111111,222222 — everyone listed gets order
+    // alerts/escalation pings, and can all use the admin chat with equal
+    // access. TELEGRAM_OWNER_CHAT_ID (singular) still works if you only
+    // have one.
+    ownerChatIds: (process.env.TELEGRAM_OWNER_CHAT_IDS || process.env.TELEGRAM_OWNER_CHAT_ID || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
     // Set via @BotFather-independent random string you choose, then use it
     // when calling Telegram's setWebhook (see README) — Telegram echoes it
     // back on every real webhook call so we can verify authenticity.
@@ -44,15 +72,23 @@ const config = {
   },
 };
 
+// Given the Facebook Page id a webhook event came in on, returns the right
+// access token to reply with. Falls back to the single PAGE_ACCESS_TOKEN if
+// you're only running on one page and never bothered with the plural env
+// var — keeps single-page setups working exactly as before.
+function getPageAccessToken(pageId) {
+  return config.messenger.pageAccessTokens[pageId] || config.messenger.pageAccessToken;
+}
+
 // Fail loudly at startup rather than mysteriously later
 function assertConfigured() {
   const required = [
-    ['PAGE_ACCESS_TOKEN', config.messenger.pageAccessToken],
+    ['PAGE_ACCESS_TOKEN or PAGE_ACCESS_TOKENS', config.messenger.pageAccessToken || Object.keys(config.messenger.pageAccessTokens).length > 0 ? 'set' : ''],
     ['VERIFY_TOKEN', config.messenger.verifyToken],
     ['ANTHROPIC_API_KEY', config.anthropic.apiKey],
     ['OPENAI_API_KEY', config.openai.apiKey],
     ['TELEGRAM_BOT_TOKEN', config.telegram.botToken],
-    ['TELEGRAM_OWNER_CHAT_ID', config.telegram.ownerChatId],
+    ['TELEGRAM_OWNER_CHAT_IDS (or TELEGRAM_OWNER_CHAT_ID)', config.telegram.ownerChatIds.length > 0 ? 'set' : ''],
   ];
 
   const missing = required.filter(([, value]) => !value).map(([name]) => name);
@@ -73,4 +109,4 @@ function assertConfigured() {
   }
 }
 
-module.exports = { config, assertConfigured };
+module.exports = { config, assertConfigured, getPageAccessToken };
