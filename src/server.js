@@ -11,7 +11,16 @@ const app = express();
 app.use(express.json({ verify: verifySignature }));
 
 app.get('/', (req, res) => {
-  res.send('Messenger order bot is running.');
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta name="facebook-domain-verification" content="21gp4h4wiitfo1lkrbgh7gdlnhrbzf" />
+  <title>Messenger order bot</title>
+</head>
+<body>
+  Messenger order bot is running.
+</body>
+</html>`);
 });
 
 // Visit this in your browser to see the LIVE, current stock numbers —
