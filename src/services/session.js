@@ -16,6 +16,11 @@ function getSession(psid) {
       cart: [],
       customer: {},
       createdAt: Date.now(),
+      // Set when the bot escalates to the owner (confusion, upset customer,
+      // bank transfer request, etc.) — while true, the bot stops
+      // auto-responding to this customer until the owner resolves it.
+      needsHuman: false,
+      humanHelpReason: null,
     });
   }
   return sessions.get(psid);
@@ -29,4 +34,10 @@ function resetSession(psid) {
   sessions.delete(psid);
 }
 
-module.exports = { getSession, saveSession, resetSession };
+// Returns every session currently flagged for owner attention — used by
+// the admin chat's "list_flagged_customers" tool.
+function listFlaggedSessions() {
+  return Array.from(sessions.values()).filter((s) => s.needsHuman);
+}
+
+module.exports = { getSession, saveSession, resetSession, listFlaggedSessions };

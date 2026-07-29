@@ -42,6 +42,10 @@ const SYSTEM_PROMPT = `
 
 مهمتك: تساعد الزبون يلقى المنتج اللي يبيه، تضيفه للطلبية، وتاخذ بياناته (الاسم، الرقم، العنوان) وتأكد الطلبية.
 
+استخدم وصف المنتج (short_description) اللي يطلع في نتيجة search_products بطريقتين:
+- عشان تبيع بشكل أحسن: اذكر تفاصيل زي نوع القماش أو الخامة أو القصة أو المناسبة المناسبة له، بشكل طبيعي وحماسي بدون مبالغة، لما يكون في وصف مفيد متوفر.
+- عشان تتأكد من الصور: لو الزبون بعتلك صورة، قارن اللي شايفه في الصورة (لون، خامة، شكل) مع وصف المنتجات في نتيجة البحث عشان تتأكد فعلاً هذا هو المنتج قبل ما تأكدله.
+
 قواعد مهمة:
 - استخدم search_products أي وقت الزبون يسأل عن منتج أو يوصف شي يبيه. لا تخترع أسماء منتجات أو أسعار من عندك.
 - لما تسوي search_products، استخدم كلمة أساسية بسيطة (اسم المنتج بالمفرد، بدون صيغة الجمع) بدل الجملة كاملة — مثلاً "قميص" مو "قمصان بيضاء قطن".
@@ -51,10 +55,17 @@ const SYSTEM_PROMPT = `
 - كل منتج عنده variants (مقاسات/ألوان) بكمية حقيقية لكل واحد فيهم. لما الزبون يسأل عن مقاس أو لون معين، شوف الكمية المتوفرة بالضبط قبل ما تأكدله إنه متوفر.
 - لما تضيف منتج للسلة (add_item_to_cart)، استخدم نص الـ variant بالضبط زي ما طلع في نتيجة search_products (مثلاً "أسود - M")، مو صيغة مختلفة أو مختصرة — هذا مهم عشان تحديث المخزون يشتغل صح.
 - استخدم send_product_photo لو الزبون طلب يشوف صورة، أو لو يقولك "ابعتلي صورة" أو شي مشابه. لازم تستدعي الأداة فعلاً قبل ما تكتب أي جملة توحي إنك بعت صورة (زي "هذا هو المنتج") — ما تكتبش جملة كذا من غير ما تستخدم الأداة أولاً.
+- بعض المنتجات عندها صور مختلفة لكل لون (شوف حقل images في نتيجة search_products). لو الزبون ذكر لون معين، ابعتله صورة هذا اللون بالضبط. لو ما ذكرش لون وفي أكثر من لون متوفر، اسأله أي لون يبي يشوف قبل ما تبعت.
 - لما الزبون يأكد شي يبيه، استخدم add_item_to_cart.
 - قبل ما تأكد الطلبية النهائية، لازم يكون عندك: اسم الزبون، رقم هاتفه، والعنوان. اسألهم لو ناقصين.
 - لما كل شي كامل والزبون يأكد الطلبية، استخدم finalize_order مرة وحدة بس.
 - بعد finalize_order، قول للزبون بأن الطلبية وصلت واشكره.
+- استخدم request_human_help في هذي الحالات:
+  - الزبون يبي يدفع بحوالة بنكية (مو نقدي عند التسليم) — قوله إن صاحب المحل بيتواصل معاه بتفاصيل الدفع، وما تعطيش أي تفاصيل بنكية بنفسك.
+  - الزبون طلب صراحة يتكلم مع شخص حقيقي.
+  - جربت أكثر من مرة تفهم شنو يبي الزبون وما قدرتش.
+  - الزبون يبين عليه منزعج أو مستاء.
+  بعد ما تستدعي الأداة، قول للزبون بلطف إن صاحب المحل بيتابع معاه قريب، ووقف — لا تكمل تحاول تحل المشكلة بنفسك.
 
 رد دايما بشكل طبيعي كإنسان، بدون أي علامات أو JSON في الرسالة النهائية للزبون.
 `.trim();
@@ -73,11 +84,12 @@ const tools = [
   },
   {
     name: 'send_product_photo',
-    description: 'Send a product photo to the customer in the chat. Use when the customer asks to see a product, or it would help them decide.',
+    description: 'Send product photo(s) to the customer in the chat. Use when the customer asks to see a product, or it would help them decide. If the product has multiple photos for a color (e.g. front and back), all of them are sent. If the product has different photos per color (check the "images" field from search_products) and the customer mentioned or is considering a specific color, pass that color to get the right photos.',
     input_schema: {
       type: 'object',
       properties: {
         product_id: { type: 'string', description: 'The product id from a previous search_products result' },
+        color: { type: 'string', description: 'The color name exactly as it appears in the product\'s "images" field, if the customer wants a specific color. Omit for the default photo.' },
       },
       required: ['product_id'],
     },
@@ -118,6 +130,18 @@ const tools = [
       properties: {},
     },
   },
+  {
+    name: 'request_human_help',
+    description:
+      'Escalate this conversation to the store owner and stop responding automatically until they resolve it. Use when: the customer explicitly asks for a human; you genuinely cannot understand what the customer wants after a couple of tries; the customer seems upset or frustrated; or the customer wants to pay via bank transfer (حوالة بنكية) — payment methods other than cash on delivery always need the owner.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'Short reason, in Arabic, for the owner — e.g. "الزبون يبي يدفع بحوالة بنكية" or "ما قدرتش نفهم شنو يبي بعد عدة محاولات"' },
+      },
+      required: ['reason'],
+    },
+  },
 ];
 
 async function executeTool(toolName, input, session, psid) {
@@ -129,11 +153,17 @@ async function executeTool(toolName, input, session, psid) {
 
     case 'send_product_photo': {
       const product = await catalog.getProduct(input.product_id);
-      if (product?.image_url) {
-        await messenger.sendImage(psid, product.image_url);
-        return { sent: true };
+      const colorPhotos = input.color && product?.images ? product.images[input.color] : null;
+      const urls = colorPhotos && colorPhotos.length > 0 ? colorPhotos : (product?.image_url ? [product.image_url] : []);
+
+      if (urls.length === 0) {
+        return { sent: false, reason: 'no image available' };
       }
-      return { sent: false, reason: 'no image available' };
+
+      for (const url of urls) {
+        await messenger.sendImage(psid, url);
+      }
+      return { sent: true, count: urls.length, color: input.color || null };
     }
 
     case 'add_item_to_cart': {
@@ -170,6 +200,18 @@ async function executeTool(toolName, input, session, psid) {
       return { success: true };
     }
 
+    case 'request_human_help': {
+      session.needsHuman = true;
+      session.humanHelpReason = input.reason || 'غير محدد';
+
+      const alert = buildHumanHelpAlert(session, psid);
+      const messageId = await telegram.sendMessage(config.telegram.ownerChatId, alert);
+      await telegram.pinMessage(config.telegram.ownerChatId, messageId);
+      session.pinnedMessageId = messageId;
+
+      return { success: true };
+    }
+
     default:
       return { error: `unknown tool ${toolName}` };
   }
@@ -193,6 +235,46 @@ function buildOrderSummary(session) {
     `العنوان: ${session.customer.address || '—'}`,
   ];
   if (session.customer.notes) lines.push(`ملاحظات: ${session.customer.notes}`);
+  return lines.join('\n');
+}
+
+// Pulls out a readable last-few-turns transcript from the raw message
+// history — skipping tool_use/tool_result blocks, which aren't useful for
+// a human skimming context quickly.
+function extractRecentTranscript(session, maxTurns = 6) {
+  const readable = [];
+
+  for (const msg of session.history) {
+    if (typeof msg.content === 'string') {
+      readable.push(`${msg.role === 'user' ? 'الزبون' : 'البوت'}: ${msg.content.replace(/\n\n\[تذكير داخلي[\s\S]*?\]$/, '').trim()}`);
+    } else if (Array.isArray(msg.content)) {
+      const text = msg.content
+        .filter((b) => b.type === 'text')
+        .map((b) => b.text)
+        .join(' ')
+        .trim();
+      if (text) readable.push(`${msg.role === 'user' ? 'الزبون' : 'البوت'}: ${text}`);
+    }
+  }
+
+  return readable.slice(-maxTurns).join('\n');
+}
+
+function buildHumanHelpAlert(session, psid) {
+  const lines = [
+    '🚨 عاجل — زبون ينتظرك الآن',
+    '',
+    `السبب: ${session.humanHelpReason}`,
+    '',
+    session.customer.name ? `الاسم: ${session.customer.name}` : null,
+    session.customer.phone ? `الهاتف: ${session.customer.phone}` : null,
+    '',
+    'آخر رسائل:',
+    extractRecentTranscript(session) || '(ما فيش محادثة سابقة)',
+    '',
+    'روح ماسنجر ورد عليه مباشرة. البوت وقف يرد عليه تلقائياً — قولي "استأنف" في هذا الشات بعد ما تخلص عشان يكمل معاه.',
+  ].filter((l) => l !== null);
+
   return lines.join('\n');
 }
 

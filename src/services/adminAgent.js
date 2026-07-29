@@ -1,7 +1,8 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
 const inventory = require('./inventory');
-const { getSession, saveSession, resetSession } = require('./session');
+const telegram = require('./telegram');
+const { getSession, saveSession, resetSession, listFlaggedSessions } = require('./session');
 
 const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
 
@@ -22,12 +23,17 @@ const SYSTEM_PROMPT = `
 - استخدم get_product_details لما تحتاج تشوف كل المتغيرات (المقاسات/الألوان) الحالية لمنتج معين.
 - استخدم adjust_stock لما يقول "زيد X قطعة" أو "انقص X قطعة" أو "بيعت X قطعة" لمقاس/لون معين — الرقم يكون موجب للزيادة وسالب للنقصان.
 - لو قال "خلص عندي X" أو أرقام مطلقة (مو زيادة/نقصان)، احسب الفرق بينها وبين الكمية الحالية (استخدم get_product_details الأول) وبعدين استخدم adjust_stock بالفرق.
-- استخدم add_product لما يبي يضيف منتج كامل جديد.
-- استخدم update_product_info لتعديل الاسم/السعر/الصورة/الوصف — بدون ما تلمس المتغيرات.
+- استخدم add_product لما يبي يضيف منتج كامل جديد. حاول تسأله عن تفاصيل الوصف (الخامة، القصة، ليه المنتج زين) لو ما ذكرهاش، لأن هذا يساعد البوت اللي يرد على الزبائن يبيع أحسن ويتعرف على الصور اللي يبعتوها.
+- استخدم update_product_info لتعديل الاسم/السعر/الصورة الافتراضية/الوصف — بدون ما تلمس المتغيرات.
+- كل منتج يقدر يكون عنده أكثر من صورة لكل لون (مثلاً صورة قدام وصورة ورا). لو صاحب المحل بعتلك رابط صورة وقال "هذي صورة اللون الأسود"، استخدم add_color_image — هذا يضيف الصورة بدون ما يمسح الصور القديمة لنفس اللون، فلو بعت صورتين على التوالي لنفس اللون، الاثنتين تتحفظوا. لو ما حددش لون، اسأله أي لون هذي الصورة قبل ما تحفظها. لو غلط في صورة وتبي تصفي كل صور لون معين وتبدأ من جديد، استخدم clear_color_images.
 - استخدم delete_variant لمسح مقاس/لون معين بس.
 - قبل ما تستخدم delete_product (مسح منتج كامل)، لازم تأكد معاه أول مرة ("متأكد تبي تمسح [اسم المنتج] بالكامل؟") وما تنفذش إلا لو أكدلك صراحة.
 - بعد أي عملية، لخصله شنو صار بجملة وحدة أو جملتين، بدون تفاصيل تقنية.
 - لو صاحب المحل طلب يضيف أكثر من منتج في نفس الرسالة (مثلاً "أضيفهم كلهم مع بعض")، ضيفهم واحد واحد لكن ما تحاولش ترد بملخص طويل عن كلهم في نفس الرسالة — أضف أول منتج، أكدله بجملة قصيرة، وانتظر يقول "كمل" أو يبعت البقية قبل ما تكمل، إلا لو كانت القايمة قصيرة (منتجين ثلاثة بس).
+
+بوت الزبائن أحياناً يوقف الرد على زبون معين ويبعتلك تنبيه هنا (لما يحتاج زبون تدخلك — مثلاً يبي يدفع بحوالة، أو مستاء، أو البوت ما فهمش شنو يبيه). بعد ما تحل المشكلة يدوياً في ماسنجر:
+- استخدم list_flagged_customers لو الزبون قال "شكون ينتظر" أو تبي تشوف القايمة.
+- استخدم resume_customer بعد ما تخلص مع زبون معين عشان البوت يرجع يرد عليه تلقائياً.
 
 رد دايما كإنسان عادي، بدون JSON أو أكواد في ردك النهائي.
 `.trim();
@@ -56,7 +62,12 @@ const tools = [
         id: { type: 'string', description: 'English, no spaces, e.g. red-hoodie' },
         name: { type: 'string' },
         price: { type: 'string' },
-        image_url: { type: 'string' },
+        image_url: { type: 'string', description: 'Default/fallback photo, used for any color without its own photo' },
+        images: {
+          type: 'object',
+          description: 'Optional per-color photos, e.g. {"أسود": "https://...", "أزرق": "https://..."}. Only include if the owner gave you specific photo links per color.',
+          additionalProperties: { type: 'string' },
+        },
         description: { type: 'string' },
         keywords: { type: 'array', items: { type: 'string' } },
         variants: {
@@ -73,7 +84,7 @@ const tools = [
   },
   {
     name: 'update_product_info',
-    description: 'Update a product\'s name, price, image, description, and/or keywords — does not touch stock/variants.',
+    description: 'Update a product\'s name, price, default image, description, and/or keywords — does not touch stock/variants or per-color photos (use add_color_image for those).',
     input_schema: {
       type: 'object',
       properties: {
@@ -85,6 +96,31 @@ const tools = [
         keywords: { type: 'array', items: { type: 'string' } },
       },
       required: ['product_id'],
+    },
+  },
+  {
+    name: 'add_color_image',
+    description: 'Add one more photo for a specific color of a product (e.g. a front photo, then later a back photo). Does NOT remove existing photos for that color — call it once per photo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        product_id: { type: 'string' },
+        color: { type: 'string', description: 'The color name, matching how it appears in the product\'s variant labels' },
+        image_url: { type: 'string' },
+      },
+      required: ['product_id', 'color', 'image_url'],
+    },
+  },
+  {
+    name: 'clear_color_images',
+    description: 'Remove ALL photos saved for one specific color of a product — use to fix a mistake before re-adding the correct photos.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        product_id: { type: 'string' },
+        color: { type: 'string' },
+      },
+      required: ['product_id', 'color'],
     },
   },
   {
@@ -121,6 +157,22 @@ const tools = [
       required: ['product_id'],
     },
   },
+  {
+    name: 'list_flagged_customers',
+    description: 'List every customer conversation currently paused waiting for the owner\'s attention, with the reason and recent context for each.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'resume_customer',
+    description: 'Resume normal bot responses for a customer whose conversation was paused for owner attention. Call this once the owner has handled it on Messenger.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        psid: { type: 'string', description: 'The customer\'s id, from a previous list_flagged_customers result' },
+      },
+      required: ['psid'],
+    },
+  },
 ];
 
 async function executeTool(toolName, input) {
@@ -135,6 +187,7 @@ async function executeTool(toolName, input) {
         name: input.name,
         price: String(input.price),
         image_url: input.image_url || null,
+        images: input.images || {},
         description: input.description || '',
         keywords: input.keywords || [],
         variants: input.variants,
@@ -144,12 +197,38 @@ async function executeTool(toolName, input) {
       if (fields.price) fields.price = String(fields.price);
       return inventory.updateProduct(product_id, fields);
     }
+    case 'add_color_image':
+      return inventory.addColorImage(input.product_id, input.color, input.image_url);
+    case 'clear_color_images':
+      return inventory.clearColorImages(input.product_id, input.color);
     case 'adjust_stock':
       return inventory.adjustStock(input.product_id, input.variant_label, input.delta);
     case 'delete_variant':
       return inventory.deleteVariant(input.product_id, input.variant_label);
     case 'delete_product':
       return inventory.deleteProduct(input.product_id);
+    case 'list_flagged_customers': {
+      const flagged = listFlaggedSessions();
+      return flagged.map((s) => ({
+        psid: s.psid,
+        reason: s.humanHelpReason,
+        customer_name: s.customer?.name || null,
+        customer_phone: s.customer?.phone || null,
+      }));
+    }
+    case 'resume_customer': {
+      const target = getSession(input.psid);
+      target.needsHuman = false;
+      target.humanHelpReason = null;
+
+      if (target.pinnedMessageId) {
+        await telegram.unpinMessage(config.telegram.ownerChatId, target.pinnedMessageId);
+        target.pinnedMessageId = null;
+      }
+
+      saveSession(input.psid, target);
+      return { success: true };
+    }
     default:
       return { error: `unknown tool ${toolName}` };
   }

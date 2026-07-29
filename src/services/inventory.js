@@ -48,6 +48,18 @@ function saveProducts(products) {
   }
 }
 
+// Normalizes the images map so every color's value is an array — supports
+// multiple photos per color (e.g. front + back). Handles the legacy shape
+// too (a plain string instead of an array) so nothing breaks if that ever
+// got saved before this was added.
+function normalizeImages(images) {
+  const normalized = {};
+  for (const [color, value] of Object.entries(images || {})) {
+    normalized[color] = Array.isArray(value) ? value : [value];
+  }
+  return normalized;
+}
+
 function toBotShape(product) {
   const inStockVariants = (product.variants || []).filter((v) => v.quantity > 0);
   return {
@@ -56,6 +68,9 @@ function toBotShape(product) {
     price: product.price,
     in_stock: inStockVariants.length > 0,
     image_url: product.image_url || null,
+    // Optional per-color photos, e.g. { "أسود": ["front.jpg", "back.jpg"] }.
+    // Falls back to image_url above for any color not listed here.
+    images: normalizeImages(product.images),
     short_description: product.description || '',
     variants: product.variants || [],
   };
@@ -174,6 +189,40 @@ function deleteVariant(productId, variantLabel) {
   return Promise.resolve({ success: saved });
 }
 
+// Adds one more photo for a specific color — does NOT remove existing
+// photos for that color, so calling this twice (once for a front photo,
+// once for a back photo) keeps both.
+function addColorImage(productId, color, imageUrl) {
+  const products = loadProducts();
+  const product = products.find((p) => String(p.id) === String(productId));
+  if (!product) {
+    return Promise.resolve({ success: false, reason: 'product not found' });
+  }
+
+  product.images = normalizeImages(product.images);
+  if (!product.images[color]) product.images[color] = [];
+  product.images[color].push(imageUrl);
+
+  const saved = saveProducts(products);
+  return Promise.resolve({ success: saved, totalPhotosForColor: product.images[color].length });
+}
+
+// Removes ALL photos for one color (useful to fix a mistake before
+// re-adding the correct ones).
+function clearColorImages(productId, color) {
+  const products = loadProducts();
+  const product = products.find((p) => String(p.id) === String(productId));
+  if (!product) {
+    return Promise.resolve({ success: false, reason: 'product not found' });
+  }
+
+  product.images = normalizeImages(product.images);
+  delete product.images[color];
+
+  const saved = saveProducts(products);
+  return Promise.resolve({ success: saved });
+}
+
 // Adds a brand new product. Returns { success: true } or
 // { success: false, reason } (e.g. duplicate id).
 function addProduct(newProduct) {
@@ -241,6 +290,8 @@ module.exports = {
   addProduct,
   updateProduct,
   deleteProduct,
+  addColorImage,
+  clearColorImages,
   listProducts,
   getRawInventory: loadProducts,
 };
