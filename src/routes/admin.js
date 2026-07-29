@@ -71,6 +71,42 @@ function parseVariantsText(text) {
     .filter(Boolean);
 }
 
+// Format: "<color> = <url>" per line. Using "=" (not ":") as the separator
+// deliberately — image URLs contain "https://" which has a colon in it, so
+// splitting on ":" would break the URL. "=" never appears in a color name
+// or a URL, so it's a safe delimiter here.
+//
+// Multiple photos per color (e.g. front + back) are supported by just
+// repeating the same color on more than one line:
+//   أسود = https://front.jpg
+//   أسود = https://back.jpg
+function colorImagesToText(images) {
+  const lines = [];
+  Object.entries(images || {}).forEach(([color, urls]) => {
+    const list = Array.isArray(urls) ? urls : [urls]; // tolerate legacy single-string data
+    list.forEach((url) => lines.push(`${color} = ${url}`));
+  });
+  return lines.join('\n');
+}
+
+function parseColorImagesText(text) {
+  const images = {};
+  (text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const idx = line.indexOf('=');
+      if (idx === -1) return;
+      const color = line.slice(0, idx).trim();
+      const url = line.slice(idx + 1).trim();
+      if (!color || !url) return;
+      if (!images[color]) images[color] = [];
+      images[color].push(url);
+    });
+  return images;
+}
+
 function redirectWithMsg(res, req, path, msg, ok) {
   const sep = path.includes('?') ? '&' : '?';
   res.redirect(`${withKey(path, req)}${sep}msg=${encodeURIComponent(msg)}&ok=${ok ? '1' : '0'}`);
@@ -124,11 +160,17 @@ router.get('/', (req, res) => {
         <label>السعر (د.ل)</label>
         <input name="price" required type="number" />
 
-        <label>رابط الصورة (اختياري الآن)</label>
+        <label>رابط الصورة الافتراضي (لو المنتج مالوش صور حسب اللون تحت)</label>
         <input name="image_url" />
 
-        <label>وصف قصير</label>
-        <input name="description" />
+        <label>صور حسب اللون (اختياري) — سطر واحد لكل صورة. لو تبي أكثر من صورة لنفس اللون (قدام وورا)، كرر نفس اللون بسطر ثاني:</label>
+        <div class="hint">أسود = https://i.imgur.com/front.jpg</div>
+        <div class="hint">أسود = https://i.imgur.com/back.jpg</div>
+        <div class="hint">أزرق فاتح = https://i.imgur.com/yyyyy.jpg</div>
+        <textarea name="color_images" placeholder="أسود = https://i.imgur.com/xxxxx.jpg&#10;أزرق فاتح = https://i.imgur.com/yyyyy.jpg"></textarea>
+
+        <label>وصف المنتج (الخامة، القصة، ليه زين — يساعد البوت يبيع أحسن ويتعرف على الصور)</label>
+        <input name="description" placeholder="مثال: قماش قطن ناعم، قصة كاجوال واسعة، مناسب للصيف" />
 
         <label>كلمات مفتاحية إضافية (افصل بفاصلة ,)</label>
         <input name="keywords" placeholder="مثال: هودي, سويتشيرت" />
@@ -149,6 +191,7 @@ router.post('/add-product', express.urlencoded({ extended: true }), async (req, 
 
   const { id, name, price, image_url, description, keywords } = req.body;
   const variants = parseVariantsText(req.body.variants);
+  const images = parseColorImagesText(req.body.color_images);
 
   if (!id || !name || !price || variants.length === 0) {
     return redirectWithMsg(res, req, '/admin', 'تأكد إنك عبيت كل الحقول المطلوبة والمتغيرات بالشكل الصحيح', false);
@@ -159,6 +202,7 @@ router.post('/add-product', express.urlencoded({ extended: true }), async (req, 
     name,
     price: String(price),
     image_url: image_url || null,
+    images,
     description: description || '',
     keywords: keywords ? keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
     variants,
@@ -191,11 +235,16 @@ router.get('/edit/:id', async (req, res) => {
         <label>السعر (د.ل)</label>
         <input name="price" required type="number" value="${product.price}" />
 
-        <label>رابط الصورة</label>
+        <label>رابط الصورة الافتراضي (لو مافيش صورة للون المطلوب تحت)</label>
         <input name="image_url" value="${product.image_url || ''}" />
 
-        <label>وصف قصير</label>
-        <input name="description" value="${product.short_description || ''}" />
+        <label>صور حسب اللون — سطر واحد لكل صورة (كرر نفس اللون لصورة قدام/ورا):</label>
+        <div class="hint">أسود = https://i.imgur.com/front.jpg</div>
+        <div class="hint">أسود = https://i.imgur.com/back.jpg</div>
+        <textarea name="color_images">${colorImagesToText(product.images)}</textarea>
+
+        <label>وصف المنتج (الخامة، القصة، ليه زين — يساعد البوت يبيع أحسن ويتعرف على الصور)</label>
+        <input name="description" value="${product.short_description || ''}" placeholder="مثال: قماش قطن ناعم، قصة كاجوال واسعة، مناسب للصيف" />
 
         <label>كلمات مفتاحية إضافية (افصل بفاصلة ,)</label>
         <input name="keywords" value="${(raw?.keywords || []).join(', ')}" />
@@ -214,6 +263,7 @@ router.post('/edit/:id', express.urlencoded({ extended: true }), async (req, res
 
   const { name, price, image_url, description, keywords } = req.body;
   const variants = parseVariantsText(req.body.variants);
+  const images = parseColorImagesText(req.body.color_images);
 
   if (!name || !price || variants.length === 0) {
     return redirectWithMsg(res, req, `/admin/edit/${encodeURIComponent(req.params.id)}`, 'تأكد إنك عبيت كل الحقول والمتغيرات بالشكل الصحيح', false);
@@ -223,6 +273,7 @@ router.post('/edit/:id', express.urlencoded({ extended: true }), async (req, res
     name,
     price: String(price),
     image_url: image_url || null,
+    images,
     description: description || '',
     keywords: keywords ? keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
     variants,

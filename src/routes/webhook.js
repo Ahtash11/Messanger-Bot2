@@ -40,6 +40,14 @@ async function handleEvent(event) {
 
   const session = getSession(psid);
 
+  // This customer's conversation was escalated to the owner — stop
+  // auto-responding until the owner resolves it (via the Telegram admin
+  // chat's "استأنف" command), so the bot doesn't talk over a human reply.
+  if (session.needsHuman) {
+    await messenger.sendText(psid, 'طلبك عند صاحب المحل يشوفه توا، شوي وبيتواصل معاك 🙏');
+    return;
+  }
+
   const imageAttachment = event.message.attachments?.find((a) => a.type === 'image');
   if (imageAttachment) {
     try {
