@@ -1,0 +1,622 @@
+[
+  {
+    "id": "casual-pants",
+    "name": "سروال كاجوال",
+    "price": "85",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Casual Pants",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "بيج - 30",
+        "quantity": 1
+      },
+      {
+        "label": "بيج - 31",
+        "quantity": 2
+      },
+      {
+        "label": "بيج - 32",
+        "quantity": 1
+      },
+      {
+        "label": "بيج - 33",
+        "quantity": 4
+      },
+      {
+        "label": "بيج - 34",
+        "quantity": 1
+      },
+      {
+        "label": "بيج - 36",
+        "quantity": 2
+      },
+      {
+        "label": "بيج - 38",
+        "quantity": 1
+      },
+      {
+        "label": "بني - 32",
+        "quantity": 1
+      },
+      {
+        "label": "بني - 34",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - 31",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - 34",
+        "quantity": 1
+      },
+      {
+        "label": "رصاصي - 38",
+        "quantity": 2
+      },
+      {
+        "label": "رصاصي - 34",
+        "quantity": 1
+      },
+      {
+        "label": "رصاصي - 30",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - M",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - S",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "polo-knit",
+    "name": "تريكو بولو",
+    "price": "99",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Polo Knit",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "رصاصي داكن - 3XL",
+        "quantity": 3
+      },
+      {
+        "label": "رصاصي داكن - 2XL",
+        "quantity": 3
+      },
+      {
+        "label": "رصاصي داكن - XL",
+        "quantity": 1
+      },
+      {
+        "label": "رصاصي داكن - L",
+        "quantity": 4
+      },
+      {
+        "label": "رصاصي داكن - M",
+        "quantity": 4
+      },
+      {
+        "label": "اسود - 3XL",
+        "quantity": 5
+      },
+      {
+        "label": "اسود - 2XL",
+        "quantity": 8
+      },
+      {
+        "label": "اسود - XL",
+        "quantity": 5
+      },
+      {
+        "label": "اسود - L",
+        "quantity": 5
+      },
+      {
+        "label": "اسود - M",
+        "quantity": 4
+      },
+      {
+        "label": "فاتح - L",
+        "quantity": 2
+      },
+      {
+        "label": "فاتح - M",
+        "quantity": 1
+      },
+      {
+        "label": "فاتح - XXL",
+        "quantity": 1
+      },
+      {
+        "label": "ابيض - L",
+        "quantity": 2
+      },
+      {
+        "label": "ابيض - XXXL",
+        "quantity": 3
+      },
+      {
+        "label": "ابيض - XL",
+        "quantity": 1
+      },
+      {
+        "label": "اخضر - XXL",
+        "quantity": 1
+      },
+      {
+        "label": "اخضر - L",
+        "quantity": 1
+      },
+      {
+        "label": "اوف وايت - XXXL",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "pants-k-line",
+    "name": "سروال (ك)",
+    "price": "85",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Pants (K line)",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "اسود - XXL",
+        "quantity": 0
+      },
+      {
+        "label": "اسود - XL",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - L",
+        "quantity": 2
+      },
+      {
+        "label": "اسود - M",
+        "quantity": 0
+      },
+      {
+        "label": "اسود - S",
+        "quantity": 1
+      },
+      {
+        "label": "ابيض - XXL",
+        "quantity": 1
+      },
+      {
+        "label": "ابيض - XL",
+        "quantity": 2
+      },
+      {
+        "label": "ابيض - L",
+        "quantity": 1
+      },
+      {
+        "label": "ابيض - M",
+        "quantity": 0
+      },
+      {
+        "label": "ابيض - S",
+        "quantity": 0
+      },
+      {
+        "label": "بيج - XXL",
+        "quantity": 2
+      },
+      {
+        "label": "بيج - XL",
+        "quantity": 0
+      },
+      {
+        "label": "بيج - L",
+        "quantity": 1
+      },
+      {
+        "label": "بيج - M",
+        "quantity": 0
+      },
+      {
+        "label": "بيج - S",
+        "quantity": 0
+      }
+    ]
+  },
+  {
+    "id": "baggy-pants",
+    "name": "سروال Baggy",
+    "price": "159",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Baggy Pants",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "اسود - 29",
+        "quantity": 4
+      },
+      {
+        "label": "ازرق فاتح - 29",
+        "quantity": 9
+      },
+      {
+        "label": "رصاصي غامق - 29",
+        "quantity": 4
+      },
+      {
+        "label": "رصاصي فاتح - 29",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - 30",
+        "quantity": 2
+      },
+      {
+        "label": "ازرق فاتح - 30",
+        "quantity": 9
+      },
+      {
+        "label": "رصاصي غامق - 30",
+        "quantity": 4
+      },
+      {
+        "label": "رصاصي فاتح - 30",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - 31",
+        "quantity": 3
+      },
+      {
+        "label": "ازرق فاتح - 31",
+        "quantity": 7
+      },
+      {
+        "label": "رصاصي غامق - 31",
+        "quantity": 5
+      },
+      {
+        "label": "رصاصي فاتح - 31",
+        "quantity": 2
+      },
+      {
+        "label": "اسود - 32",
+        "quantity": 2
+      },
+      {
+        "label": "ازرق فاتح - 32",
+        "quantity": 10
+      },
+      {
+        "label": "رصاصي غامق - 32",
+        "quantity": 6
+      },
+      {
+        "label": "رصاصي فاتح - 32",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - 33",
+        "quantity": 1
+      },
+      {
+        "label": "ازرق فاتح - 33",
+        "quantity": 8
+      },
+      {
+        "label": "رصاصي غامق - 33",
+        "quantity": 3
+      },
+      {
+        "label": "رصاصي فاتح - 33",
+        "quantity": 0
+      },
+      {
+        "label": "اسود - 34",
+        "quantity": 5
+      },
+      {
+        "label": "ازرق فاتح - 34",
+        "quantity": 7
+      },
+      {
+        "label": "رصاصي غامق - 34",
+        "quantity": 1
+      },
+      {
+        "label": "رصاصي فاتح - 34",
+        "quantity": 0
+      },
+      {
+        "label": "اسود - 36",
+        "quantity": 1
+      },
+      {
+        "label": "ازرق فاتح - 36",
+        "quantity": 5
+      },
+      {
+        "label": "رصاصي غامق - 36",
+        "quantity": 4
+      },
+      {
+        "label": "رصاصي فاتح - 36",
+        "quantity": 0
+      },
+      {
+        "label": "اسود - 38",
+        "quantity": 1
+      },
+      {
+        "label": "ازرق فاتح - 38",
+        "quantity": 5
+      },
+      {
+        "label": "رصاصي غامق - 38",
+        "quantity": 5
+      },
+      {
+        "label": "رصاصي فاتح - 38",
+        "quantity": 0
+      }
+    ]
+  },
+  {
+    "id": "tricot-line-p",
+    "name": "تريكو P",
+    "price": "99",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Tricot - Line P",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "اسود - L",
+        "quantity": 3
+      },
+      {
+        "label": "اسود - S",
+        "quantity": 2
+      },
+      {
+        "label": "اسود - M",
+        "quantity": 1
+      },
+      {
+        "label": "برغاندي - M",
+        "quantity": 1
+      },
+      {
+        "label": "برغاندي - S",
+        "quantity": 2
+      },
+      {
+        "label": "بني - M",
+        "quantity": 1
+      },
+      {
+        "label": "بني - L",
+        "quantity": 1
+      },
+      {
+        "label": "ازرق - L",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "tricot-line-en10",
+    "name": "تريكو en10",
+    "price": "99",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Tricot - Line en10",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "ابيض - L",
+        "quantity": 2
+      },
+      {
+        "label": "ابيض - S",
+        "quantity": 1
+      },
+      {
+        "label": "برغاندي - S",
+        "quantity": 2
+      },
+      {
+        "label": "برغاندي - L",
+        "quantity": 1
+      },
+      {
+        "label": "بني - S",
+        "quantity": 1
+      },
+      {
+        "label": "بني - L",
+        "quantity": 1
+      },
+      {
+        "label": "بني - M",
+        "quantity": 1
+      },
+      {
+        "label": "ازرق - S",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "t-shirts-bidaya-line",
+    "name": "تيشرتات بداية",
+    "price": "79",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "T-Shirts - Bidaya Line",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "ابيض - XL",
+        "quantity": 2
+      },
+      {
+        "label": "رصاصي - S",
+        "quantity": 3
+      },
+      {
+        "label": "رصاصي - M",
+        "quantity": 1
+      },
+      {
+        "label": "رصاصي - XL",
+        "quantity": 1
+      },
+      {
+        "label": "رصاصي - XXL",
+        "quantity": 1
+      },
+      {
+        "label": "اخضر - S",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "shirts-bidaya-line",
+    "name": "سواري بداية",
+    "price": "79",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Shirts - Bidaya Line",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "رصاصي - S",
+        "quantity": 2
+      },
+      {
+        "label": "رصاصي - M",
+        "quantity": 1
+      },
+      {
+        "label": "رصاصي - L",
+        "quantity": 1
+      },
+      {
+        "label": "رصاصي - XXL",
+        "quantity": 2
+      },
+      {
+        "label": "ابيض - S",
+        "quantity": 2
+      },
+      {
+        "label": "ابيض - XL",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "linen-shirts",
+    "name": "سواري لينو",
+    "price": "129",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Linen Shirts",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "اسود - S",
+        "quantity": 1
+      },
+      {
+        "label": "اسود - L",
+        "quantity": 1
+      },
+      {
+        "label": "سماوي - S",
+        "quantity": 3
+      },
+      {
+        "label": "سماوي - L",
+        "quantity": 7
+      },
+      {
+        "label": "سماوي - XL",
+        "quantity": 1
+      },
+      {
+        "label": "بيج - S",
+        "quantity": 1
+      },
+      {
+        "label": "بيج - M",
+        "quantity": 7
+      },
+      {
+        "label": "بيج - L",
+        "quantity": 2
+      },
+      {
+        "label": "بيج - XXL",
+        "quantity": 2
+      },
+      {
+        "label": "ابيض - S",
+        "quantity": 1
+      },
+      {
+        "label": "ابيض - L",
+        "quantity": 7
+      },
+      {
+        "label": "ابيض - XL",
+        "quantity": 2
+      },
+      {
+        "label": "ابيض - XXL",
+        "quantity": 3
+      },
+      {
+        "label": "ازرق كحلي - L",
+        "quantity": 3
+      },
+      {
+        "label": "اخضر - L",
+        "quantity": 2
+      }
+    ]
+  },
+  {
+    "id": "linen-pants",
+    "name": "سراويل لينو",
+    "price": "129",
+    "image_url": "REPLACE_WITH_IMAGE_URL",
+    "description": "Linen Pants",
+    "keywords": [],
+    "variants": [
+      {
+        "label": "سكري - M",
+        "quantity": 3
+      },
+      {
+        "label": "بني - M",
+        "quantity": 2
+      },
+      {
+        "label": "بيج - XXL",
+        "quantity": 5
+      },
+      {
+        "label": "اخضر - XXL",
+        "quantity": 2
+      },
+      {
+        "label": "ابيض - XXL",
+        "quantity": 1
+      }
+    ]
+  }
+]

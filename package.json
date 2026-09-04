@@ -1,0 +1,20 @@
+{
+  "name": "messenger-order-bot",
+  "version": "1.0.0",
+  "description": "Messenger DM order-taking bot with Libyan dialect chat, voice notes, product photos, and Telegram order summaries",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "form-data": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
