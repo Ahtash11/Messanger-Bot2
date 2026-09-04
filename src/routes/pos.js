@@ -91,7 +91,7 @@ function clientScript() {
     '.pos-product .name { font-weight:bold; font-size:14px; margin-bottom:4px; }' +
     '.pos-product .price { color:#555; font-size:13px; }' +
     '.pos-variant-picker { display:flex; flex-wrap:wrap; gap:6px; margin-top:20px; }' +
-    '.pos-variant-btn { padding:8px 10px; border:1px solid #ccc; border-radius:6px; background:#fff; cursor:pointer; font-size:13px; }' +
+    '.pos-variant-btn { padding:8px 10px; border:1px solid #ccc; border-radius:6px; background:#fff; color:#222; cursor:pointer; font-size:13px; }' +
     '.pos-variant-btn:disabled { opacity:0.35; cursor:not-allowed; text-decoration:line-through; }' +
     '.pos-cart-line { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #eee; font-size:13px; }' +
     '.pos-cart-line button { margin:0; padding:2px 8px; font-size:12px; }' +
