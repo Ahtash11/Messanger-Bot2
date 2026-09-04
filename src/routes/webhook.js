@@ -9,6 +9,13 @@ const facebookComments = require('../services/facebookComments');
 
 const router = express.Router();
 
+// Scoped to this router only (not applied globally in server.js) — every
+// other route (POS, admin, telegram webhook) parses its own body without
+// this Messenger-specific signature check, so a JSON POST there doesn't
+// get rejected for lacking a Facebook signature header it was never going
+// to have.
+router.use(express.json({ verify: verifySignature }));
+
 router.get('/', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];

@@ -1,51 +1,22 @@
-const fs = require('fs');
-const path = require('path');
-const { config } = require('../config');
+const db = require('../db');
 
-// The bundled catalog (in git) — acts as the starting template/seed.
-const SEED_FILE = path.join(__dirname, '..', 'data', 'products.json');
-
-// The LIVE file the bot actually reads/writes at runtime. In production,
-// config.inventoryFilePath should point at a Railway Volume mount (e.g.
-// /data/products.json) so stock changes survive redeploys. If not set, we
-// fall back to using the seed file directly — fine for local testing, but
-// any stock changes will be overwritten the next time you redeploy from git.
-const LIVE_FILE = config.inventoryFilePath || SEED_FILE;
-
-// On first run against a fresh volume, LIVE_FILE won't exist yet — copy the
-// seed catalog there so there's something to read/write.
-function ensureLiveFile() {
-  if (LIVE_FILE === SEED_FILE) return; // nothing to bootstrap, same file
-  if (fs.existsSync(LIVE_FILE)) return;
-
+// Every write in this file goes through this wrapper — it runs the write as
+// a SQLite transaction (so a multi-statement change like "replace all
+// variants" can't half-apply) and turns any error into a logged {success:
+// false} the same way the old JSON-file version did, instead of throwing
+// and taking down the caller (a bot tool call, an admin form submit, etc).
+function runWrite(fn) {
   try {
-    fs.mkdirSync(path.dirname(LIVE_FILE), { recursive: true });
-    fs.copyFileSync(SEED_FILE, LIVE_FILE);
-    console.log(`Inventory: bootstrapped ${LIVE_FILE} from seed catalog`);
-  } catch (err) {
-    console.error('Inventory: failed to bootstrap live file:', err.message);
-  }
-}
-
-function loadProducts() {
-  ensureLiveFile();
-  try {
-    const raw = fs.readFileSync(LIVE_FILE, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('Inventory: could not read products file:', err.message);
-    return [];
-  }
-}
-
-function saveProducts(products) {
-  try {
-    fs.writeFileSync(LIVE_FILE, JSON.stringify(products, null, 2), 'utf8');
+    db.transaction(fn)();
     return true;
   } catch (err) {
-    console.error('Inventory: could not save products file:', err.message);
+    console.error('Inventory: database write failed:', err.message);
     return false;
   }
+}
+
+function productExists(id) {
+  return !!db.prepare('SELECT 1 FROM products WHERE id = ?').get(String(id));
 }
 
 // Normalizes the images map so every color's value is an array — supports
@@ -60,6 +31,35 @@ function normalizeImages(images) {
   return normalized;
 }
 
+function rowToProduct(row) {
+  if (!row) return null;
+  const variants = db
+    .prepare('SELECT label, quantity FROM variants WHERE product_id = ? ORDER BY id')
+    .all(row.id);
+  return {
+    id: row.id,
+    name: row.name,
+    price: row.price,
+    image_url: row.image_url,
+    description: row.description,
+    keywords: JSON.parse(row.keywords_json || '[]'),
+    images: JSON.parse(row.images_json || '{}'),
+    variants,
+  };
+}
+
+// Synchronous by design (not Promise-wrapped) — src/routes/admin.js calls
+// this directly without awaiting, same as when it read the JSON file.
+function loadProducts() {
+  const rows = db.prepare('SELECT * FROM products ORDER BY rowid').all();
+  return rows.map(rowToProduct);
+}
+
+function loadProduct(id) {
+  const row = db.prepare('SELECT * FROM products WHERE id = ?').get(String(id));
+  return rowToProduct(row);
+}
+
 function toBotShape(product) {
   const inStockVariants = (product.variants || []).filter((v) => v.quantity > 0);
   return {
@@ -68,8 +68,6 @@ function toBotShape(product) {
     price: product.price,
     in_stock: inStockVariants.length > 0,
     image_url: product.image_url || null,
-    // Optional per-color photos, e.g. { "أسود": ["front.jpg", "back.jpg"] }.
-    // Falls back to image_url above for any color not listed here.
     images: normalizeImages(product.images),
     short_description: product.description || '',
     variants: product.variants || [],
@@ -96,21 +94,26 @@ function searchProducts(query, perPage = 5) {
 }
 
 function getProduct(productId) {
-  const products = loadProducts();
-  const p = products.find((prod) => String(prod.id) === String(productId));
+  const p = loadProduct(productId);
   return Promise.resolve(p ? toBotShape(p) : null);
 }
 
 // Reduces stock for one specific product+variant by `quantity`, floored at
-// 0. Called once per cart item when a customer order is finalized.
+// 0 — never rejects. Used by the Messenger bot's finalize_order, where
+// Claude has already shown the customer live quantities before they
+// confirmed, so a hard reject here isn't the right UX; see
+// recordOnlineOrder below for where this gets paired with actually saving
+// the order. For the in-store POS, where two devices really can race for
+// the last unit, see sales.js's recordInStoreSale — that one DOES reject.
 function decrementStock(productId, variantLabel, quantity) {
-  const products = loadProducts();
-  const product = products.find((p) => String(p.id) === String(productId));
-  if (!product) {
+  if (!productExists(productId)) {
     return Promise.resolve({ success: false, reason: 'product not found' });
   }
 
-  const variant = (product.variants || []).find((v) => v.label === variantLabel);
+  const variant = db
+    .prepare('SELECT id, quantity FROM variants WHERE product_id = ? AND label = ?')
+    .get(String(productId), variantLabel);
+
   if (!variant) {
     console.warn(
       `Inventory: could not find variant "${variantLabel}" for product "${productId}" — stock not adjusted`
@@ -118,9 +121,11 @@ function decrementStock(productId, variantLabel, quantity) {
     return Promise.resolve({ success: false, reason: 'variant not found' });
   }
 
-  variant.quantity = Math.max(0, (variant.quantity || 0) - (quantity || 1));
-  const saved = saveProducts(products);
-  return Promise.resolve({ success: saved, remaining: variant.quantity });
+  const remaining = Math.max(0, variant.quantity - (quantity || 1));
+  const saved = runWrite(() => {
+    db.prepare('UPDATE variants SET quantity = ? WHERE id = ?').run(remaining, variant.id);
+  });
+  return Promise.resolve({ success: saved, remaining });
 }
 
 // Increases or decreases one variant's quantity by `delta` (negative to
@@ -128,64 +133,78 @@ function decrementStock(productId, variantLabel, quantity) {
 // — this is how a new size/color gets added to an existing product via the
 // admin chat. Floored at 0.
 function adjustStock(productId, variantLabel, delta) {
-  const products = loadProducts();
-  const product = products.find((p) => String(p.id) === String(productId));
-  if (!product) {
+  if (!productExists(productId)) {
     return Promise.resolve({ success: false, reason: 'product not found' });
   }
 
-  product.variants = product.variants || [];
-  let variant = product.variants.find((v) => v.label === variantLabel);
+  const variant = db
+    .prepare('SELECT id, quantity FROM variants WHERE product_id = ? AND label = ?')
+    .get(String(productId), variantLabel);
 
   if (!variant) {
     if (delta <= 0) {
       return Promise.resolve({ success: false, reason: 'variant not found' });
     }
-    variant = { label: variantLabel, quantity: 0 };
-    product.variants.push(variant);
+    const remaining = Math.max(0, delta);
+    const saved = runWrite(() => {
+      db.prepare('INSERT INTO variants (product_id, label, quantity) VALUES (?, ?, ?)').run(
+        String(productId),
+        variantLabel,
+        remaining
+      );
+    });
+    return Promise.resolve({ success: saved, remaining });
   }
 
-  variant.quantity = Math.max(0, (variant.quantity || 0) + delta);
-  const saved = saveProducts(products);
-  return Promise.resolve({ success: saved, remaining: variant.quantity });
+  const remaining = Math.max(0, variant.quantity + delta);
+  const saved = runWrite(() => {
+    db.prepare('UPDATE variants SET quantity = ? WHERE id = ?').run(remaining, variant.id);
+  });
+  return Promise.resolve({ success: saved, remaining });
 }
 
 // Sets a variant's quantity to an exact number — creates it if missing.
 function setStock(productId, variantLabel, quantity) {
-  const products = loadProducts();
-  const product = products.find((p) => String(p.id) === String(productId));
-  if (!product) {
+  if (!productExists(productId)) {
     return Promise.resolve({ success: false, reason: 'product not found' });
   }
 
-  product.variants = product.variants || [];
-  let variant = product.variants.find((v) => v.label === variantLabel);
-  if (!variant) {
-    variant = { label: variantLabel, quantity: 0 };
-    product.variants.push(variant);
-  }
-  variant.quantity = Math.max(0, quantity || 0);
+  const remaining = Math.max(0, quantity || 0);
+  const variant = db
+    .prepare('SELECT id FROM variants WHERE product_id = ? AND label = ?')
+    .get(String(productId), variantLabel);
 
-  const saved = saveProducts(products);
-  return Promise.resolve({ success: saved, remaining: variant.quantity });
+  const saved = runWrite(() => {
+    if (variant) {
+      db.prepare('UPDATE variants SET quantity = ? WHERE id = ?').run(remaining, variant.id);
+    } else {
+      db.prepare('INSERT INTO variants (product_id, label, quantity) VALUES (?, ?, ?)').run(
+        String(productId),
+        variantLabel,
+        remaining
+      );
+    }
+  });
+  return Promise.resolve({ success: saved, remaining });
 }
 
 // Removes one specific size/color option from a product entirely (not the
 // whole product — use deleteProduct for that).
 function deleteVariant(productId, variantLabel) {
-  const products = loadProducts();
-  const product = products.find((p) => String(p.id) === String(productId));
-  if (!product) {
+  if (!productExists(productId)) {
     return Promise.resolve({ success: false, reason: 'product not found' });
   }
 
-  const before = (product.variants || []).length;
-  product.variants = (product.variants || []).filter((v) => v.label !== variantLabel);
-  if (product.variants.length === before) {
+  let changed = 0;
+  const saved = runWrite(() => {
+    changed = db
+      .prepare('DELETE FROM variants WHERE product_id = ? AND label = ?')
+      .run(String(productId), variantLabel).changes;
+  });
+
+  if (saved && changed === 0) {
     return Promise.resolve({ success: false, reason: 'variant not found' });
   }
-
-  const saved = saveProducts(products);
   return Promise.resolve({ success: saved });
 }
 
@@ -193,91 +212,201 @@ function deleteVariant(productId, variantLabel) {
 // photos for that color, so calling this twice (once for a front photo,
 // once for a back photo) keeps both.
 function addColorImage(productId, color, imageUrl) {
-  const products = loadProducts();
-  const product = products.find((p) => String(p.id) === String(productId));
-  if (!product) {
+  const row = db.prepare('SELECT images_json FROM products WHERE id = ?').get(String(productId));
+  if (!row) {
     return Promise.resolve({ success: false, reason: 'product not found' });
   }
 
-  product.images = normalizeImages(product.images);
-  if (!product.images[color]) product.images[color] = [];
-  product.images[color].push(imageUrl);
+  const images = normalizeImages(JSON.parse(row.images_json || '{}'));
+  if (!images[color]) images[color] = [];
+  images[color].push(imageUrl);
 
-  const saved = saveProducts(products);
-  return Promise.resolve({ success: saved, totalPhotosForColor: product.images[color].length });
+  const saved = runWrite(() => {
+    db.prepare("UPDATE products SET images_json = ?, updated_at = datetime('now') WHERE id = ?").run(
+      JSON.stringify(images),
+      String(productId)
+    );
+  });
+  return Promise.resolve({ success: saved, totalPhotosForColor: images[color].length });
 }
 
-// Removes ALL photos for one color (useful to fix a mistake before
+// Removes ALL photos saved for one color (useful to fix a mistake before
 // re-adding the correct ones).
 function clearColorImages(productId, color) {
-  const products = loadProducts();
-  const product = products.find((p) => String(p.id) === String(productId));
-  if (!product) {
+  const row = db.prepare('SELECT images_json FROM products WHERE id = ?').get(String(productId));
+  if (!row) {
     return Promise.resolve({ success: false, reason: 'product not found' });
   }
 
-  product.images = normalizeImages(product.images);
-  delete product.images[color];
+  const images = normalizeImages(JSON.parse(row.images_json || '{}'));
+  delete images[color];
 
-  const saved = saveProducts(products);
+  const saved = runWrite(() => {
+    db.prepare("UPDATE products SET images_json = ?, updated_at = datetime('now') WHERE id = ?").run(
+      JSON.stringify(images),
+      String(productId)
+    );
+  });
   return Promise.resolve({ success: saved });
 }
 
 // Adds a brand new product. Returns { success: true } or
 // { success: false, reason } (e.g. duplicate id).
 function addProduct(newProduct) {
-  const products = loadProducts();
-
-  if (products.some((p) => String(p.id) === String(newProduct.id))) {
+  if (productExists(newProduct.id)) {
     return Promise.resolve({ success: false, reason: 'a product with this ID already exists' });
   }
 
-  products.push(newProduct);
-  const saved = saveProducts(products);
+  const saved = runWrite(() => {
+    db.prepare(`
+      INSERT INTO products (id, name, price, image_url, description, keywords_json, images_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      String(newProduct.id),
+      newProduct.name,
+      String(newProduct.price),
+      newProduct.image_url || null,
+      newProduct.description || '',
+      JSON.stringify(newProduct.keywords || []),
+      JSON.stringify(newProduct.images || {})
+    );
+
+    const insertVariant = db.prepare('INSERT INTO variants (product_id, label, quantity) VALUES (?, ?, ?)');
+    for (const v of newProduct.variants || []) {
+      insertVariant.run(String(newProduct.id), v.label, v.quantity || 0);
+    }
+  });
+
   return Promise.resolve({ success: saved });
 }
 
 // Merges partial updates into an existing product (only overwrites the
-// fields you pass in). Used for both the web admin edit form (which passes
-// everything including a full variants replacement) and the chat admin
-// agent (which typically only updates a field like price or name).
+// fields you pass in). If `updates.variants` is given, it fully replaces
+// the variant list — used by both the web admin edit form (which always
+// sends the complete list) and the chat admin agent (which typically only
+// touches name/price/description and leaves variants out entirely).
 function updateProduct(id, updates) {
-  const products = loadProducts();
-  const product = products.find((p) => String(p.id) === String(id));
-  if (!product) {
+  if (!productExists(id)) {
     return Promise.resolve({ success: false, reason: 'product not found' });
   }
 
-  Object.assign(product, updates);
-  const saved = saveProducts(products);
+  const saved = runWrite(() => {
+    const sets = [];
+    const params = [];
+    const setField = (column, value) => {
+      sets.push(`${column} = ?`);
+      params.push(value);
+    };
+
+    if (updates.name !== undefined) setField('name', updates.name);
+    if (updates.price !== undefined) setField('price', String(updates.price));
+    if (updates.image_url !== undefined) setField('image_url', updates.image_url);
+    if (updates.description !== undefined) setField('description', updates.description);
+    if (updates.keywords !== undefined) setField('keywords_json', JSON.stringify(updates.keywords));
+    if (updates.images !== undefined) setField('images_json', JSON.stringify(updates.images));
+
+    if (sets.length > 0) {
+      sets.push("updated_at = datetime('now')");
+      params.push(String(id));
+      db.prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    }
+
+    if (updates.variants !== undefined) {
+      db.prepare('DELETE FROM variants WHERE product_id = ?').run(String(id));
+      const insertVariant = db.prepare('INSERT INTO variants (product_id, label, quantity) VALUES (?, ?, ?)');
+      for (const v of updates.variants) {
+        insertVariant.run(String(id), v.label, v.quantity || 0);
+      }
+    }
+  });
+
   return Promise.resolve({ success: saved });
 }
 
 function deleteProduct(id) {
-  const products = loadProducts();
-  const index = products.findIndex((p) => String(p.id) === String(id));
-  if (index === -1) {
+  if (!productExists(id)) {
     return Promise.resolve({ success: false, reason: 'product not found' });
   }
 
-  products.splice(index, 1);
-  const saved = saveProducts(products);
+  const saved = runWrite(() => {
+    db.prepare('DELETE FROM products WHERE id = ?').run(String(id)); // variants cascade
+  });
   return Promise.resolve({ success: saved });
 }
 
 // Compact list for the admin chat agent to reference by name/id without
 // pulling every variant of every product into context each time.
 function listProducts() {
-  const products = loadProducts();
-  return Promise.resolve(
-    products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      total_quantity: (p.variants || []).reduce((s, v) => s + (v.quantity || 0), 0),
-      variant_count: (p.variants || []).length,
-    }))
+  const rows = db
+    .prepare(`
+      SELECT p.id, p.name, p.price,
+             COALESCE(SUM(v.quantity), 0) AS total_quantity,
+             COUNT(v.id) AS variant_count
+      FROM products p
+      LEFT JOIN variants v ON v.product_id = p.id
+      GROUP BY p.id
+      ORDER BY p.rowid
+    `)
+    .all();
+  return Promise.resolve(rows);
+}
+
+// Decrements stock for a confirmed online order AND persists the order
+// itself (channel='online', status='pending_pickup') in one transaction —
+// so it shows up in /admin/pending-orders for staff to physically set
+// aside, and in sales reports. Previously finalize_order only decremented
+// stock and pinged Telegram; the order itself was never actually recorded
+// anywhere, which is exactly why "already sold online" had no way to
+// surface as a warning in the shop.
+function recordOnlineOrder(cartItems, customer) {
+  const total = cartItems.reduce(
+    (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
+    0
   );
+
+  let orderId = null;
+  const saved = runWrite(() => {
+    for (const item of cartItems) {
+      if (!item.product_id) continue;
+      const variant = db
+        .prepare('SELECT id, quantity FROM variants WHERE product_id = ? AND label = ?')
+        .get(String(item.product_id), item.variant);
+
+      if (!variant) {
+        console.warn(
+          `Inventory: could not find variant "${item.variant}" for product "${item.product_id}" — stock not adjusted`
+        );
+        continue;
+      }
+
+      const remaining = Math.max(0, variant.quantity - (Number(item.quantity) || 1));
+      db.prepare('UPDATE variants SET quantity = ? WHERE id = ?').run(remaining, variant.id);
+    }
+
+    orderId = db
+      .prepare(`
+        INSERT INTO orders (channel, status, customer_name, customer_phone, customer_address, total)
+        VALUES ('online', 'pending_pickup', ?, ?, ?, ?)
+      `)
+      .run(customer?.name || null, customer?.phone || null, customer?.address || null, total).lastInsertRowid;
+
+    const insertItem = db.prepare(`
+      INSERT INTO order_items (order_id, product_id, product_name, variant_label, quantity, unit_price)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const item of cartItems) {
+      insertItem.run(
+        orderId,
+        item.product_id || null,
+        item.name,
+        item.variant || '',
+        item.quantity || 1,
+        Number(item.price) || 0
+      );
+    }
+  });
+
+  return Promise.resolve({ success: saved, orderId: saved ? orderId : null });
 }
 
 module.exports = {
@@ -293,5 +422,6 @@ module.exports = {
   addColorImage,
   clearColorImages,
   listProducts,
+  recordOnlineOrder,
   getRawInventory: loadProducts,
 };

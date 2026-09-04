@@ -1,0 +1,12 @@
+node_modules/
+.env
+
+# Local SQLite database + WAL files — this is real data (stock, sales,
+# staff accounts, customers), never something to commit. In production it
+# lives on a Railway Volume instead, outside the repo entirely.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+.claude/

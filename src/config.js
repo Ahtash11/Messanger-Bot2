@@ -24,6 +24,25 @@ const config = {
   // Leave unset and the endpoint is open to anyone who finds the URL.
   debugKey: process.env.DEBUG_KEY || null,
 
+  // Where the SQLite database file lives — same idea as inventoryFilePath
+  // above: in production this should point at a Railway Volume mount (e.g.
+  // /data/store.db) so it survives redeploys. Falls back to a local file
+  // under src/data/ if unset, which is fine for local testing.
+  databasePath: process.env.DATABASE_PATH || null,
+
+  // Signs the POS/admin login session cookie. Any long random string works
+  // — generate one with `openssl rand -hex 32` or similar. Changing it logs
+  // everyone out.
+  sessionSecret: process.env.SESSION_SECRET || 'dev-only-insecure-secret-change-me',
+
+  // Used once, on first boot only, to create the initial admin account (so
+  // there's a way to log in before any account exists). Ignored on every
+  // later boot once at least one user row exists.
+  adminBootstrap: {
+    username: process.env.ADMIN_USERNAME || null,
+    password: process.env.ADMIN_PASSWORD || null,
+  },
+
   messenger: {
     // Single-page setups: just set PAGE_ACCESS_TOKEN as before, nothing
     // else needed.
@@ -118,6 +137,25 @@ function assertConfigured() {
       '⚠️  INVENTORY_FILE_PATH is not set — using the bundled src/data/products.json ' +
       'directly. Stock changes (from orders) will be LOST on every redeploy. Set up a ' +
       'Railway Volume and point INVENTORY_FILE_PATH at it before going live.'
+    );
+  }
+
+  if (!config.databasePath) {
+    console.warn(
+      '⚠️  DATABASE_PATH is not set — using a local file under src/data/. Sales, staff ' +
+      'accounts, expenses, and customers will be LOST on every redeploy. Point it at the ' +
+      'same Railway Volume as INVENTORY_FILE_PATH before going live (e.g. /data/store.db).'
+    );
+  }
+
+  if (config.sessionSecret === 'dev-only-insecure-secret-change-me') {
+    console.warn('⚠️  SESSION_SECRET is not set — using an insecure default. Set it before going live.');
+  }
+
+  if (!config.adminBootstrap.username || !config.adminBootstrap.password) {
+    console.warn(
+      '⚠️  ADMIN_USERNAME / ADMIN_PASSWORD not set — if no admin account exists yet in the ' +
+      'database, you will not be able to log in to /pos or /admin at all.'
     );
   }
 }

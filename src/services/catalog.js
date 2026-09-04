@@ -8,4 +8,5 @@ module.exports = {
   searchProducts: inventory.searchProducts,
   getProduct: inventory.getProduct,
   decrementStock: inventory.decrementStock,
+  recordOnlineOrder: inventory.recordOnlineOrder,
 };

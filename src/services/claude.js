@@ -187,13 +187,11 @@ async function executeTool(toolName, input, session, psid) {
         return { success: false, reason: 'cart is empty' };
       }
 
-      // Reduce real stock for each item — only happens here, at
-      // confirmation time, never earlier.
-      for (const item of session.cart) {
-        if (item.product_id) {
-          await catalog.decrementStock(item.product_id, item.variant, item.quantity);
-        }
-      }
+      // Reduces real stock AND saves the order itself (status
+      // 'pending_pickup' — the item is sold but still physically on the
+      // shelf until the Darb Assabil courier collects it), so it shows up
+      // in /admin/pending-orders for staff to set aside in the shop.
+      await catalog.recordOnlineOrder(session.cart, session.customer);
 
       const summary = buildOrderSummary(session);
       await telegram.sendOrderSummary(summary);
