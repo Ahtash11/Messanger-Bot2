@@ -1,12 +1,11 @@
-const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
 const catalog = require('./catalog');
 const messenger = require('./messenger');
 const telegram = require('./telegram');
-
-const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
+const { runAgentLoop, ResponseTruncatedError } = require('./agentLoop');
 
 const MODEL = 'claude-sonnet-4-6';
+const MAX_TOKENS = 1024;
 
 const SYSTEM_PROMPT = `
 انت مساعد مبيعات ذكي تشتغل على صفحة ماسنجر لـ"${config.store.name}" — ${config.store.description}. خلي كل ردودك وأمثلتك واقتراحاتك مناسبة لهذا النوع من المحل تحديداً (مثلاً لو حد يسأل عن مقاسات أو ألوان، اسأل بطريقة تناسب نوع المنتجات اللي المحل يبيعها فعلاً).
@@ -288,51 +287,22 @@ async function handleMessage(session, userContent, psid) {
   const content =
     typeof userContent === 'string' ? userContent + DIALECT_REMINDER : userContent;
 
-  session.history.push({ role: 'user', content });
-
-  let response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    tools,
-    messages: session.history,
-  });
-
-  while (response.stop_reason === 'tool_use') {
-    session.history.push({ role: 'assistant', content: response.content });
-
-    const toolResults = [];
-    for (const block of response.content) {
-      if (block.type === 'tool_use') {
-        const result = await executeTool(block.name, block.input, session, psid);
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          content: JSON.stringify(result),
-        });
-      }
-    }
-
-    session.history.push({ role: 'user', content: toolResults });
-
-    response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+  try {
+    return await runAgentLoop({
+      history: session.history,
+      userContent: content,
+      systemPrompt: SYSTEM_PROMPT,
       tools,
-      messages: session.history,
+      model: MODEL,
+      maxTokens: MAX_TOKENS,
+      executeTool: (toolName, input) => executeTool(toolName, input, session, psid),
     });
+  } catch (err) {
+    if (err instanceof ResponseTruncatedError) {
+      return 'الرد طلع طويل زايد، تقدر تعيد سؤالك بشكل أبسط؟';
+    }
+    throw err;
   }
-
-  const finalText = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n')
-    .trim();
-
-  session.history.push({ role: 'assistant', content: response.content });
-
-  return finalText;
 }
 
 const IMAGE_MESSAGE_INSTRUCTION =

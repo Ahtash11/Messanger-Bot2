@@ -1,12 +1,11 @@
-const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
 const inventory = require('./inventory');
 const telegram = require('./telegram');
 const { getSession, saveSession, resetSession, listFlaggedSessions } = require('./session');
-
-const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
+const { runAgentLoop, ResponseTruncatedError } = require('./agentLoop');
 
 const MODEL = 'claude-sonnet-4-6';
+const MAX_TOKENS = 4096;
 
 const SYSTEM_PROMPT = `
 انت مساعد إدارة المخزون الخاص بصاحب المحل، تشتغل معاه في الشات الخاص بيه على تيليجرام — هذا مو بوت الزبائن، هذا خاص بيه بس.
@@ -252,72 +251,24 @@ async function handleAdminMessage(userText, senderChatId) {
   }
 
   const session = getSession(sessionKey);
-  session.history.push({ role: 'user', content: userText });
 
-  let response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    tools,
-    messages: session.history,
-  });
-
-  while (response.stop_reason === 'tool_use') {
-    session.history.push({ role: 'assistant', content: response.content });
-
-    // Every tool_use block MUST get a matching tool_result, even if the
-    // tool throws — otherwise the conversation history becomes permanently
-    // invalid and every future message fails, with no way to recover short
-    // of clearing the whole conversation.
-    const toolResults = [];
-    for (const block of response.content) {
-      if (block.type === 'tool_use') {
-        let result;
-        try {
-          result = await executeTool(block.name, block.input);
-        } catch (err) {
-          console.error(`Admin tool "${block.name}" failed:`, err);
-          result = { success: false, reason: `internal error: ${err.message || 'unknown'}` };
-        }
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          content: JSON.stringify(result),
-        });
-      }
-    }
-
-    session.history.push({ role: 'user', content: toolResults });
-    saveSession(sessionKey, session); // save progress after each resolved step
-
-    response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+  try {
+    return await runAgentLoop({
+      history: session.history,
+      userContent: userText,
+      systemPrompt: SYSTEM_PROMPT,
       tools,
-      messages: session.history,
+      model: MODEL,
+      maxTokens: MAX_TOKENS,
+      executeTool,
+      onProgress: () => saveSession(sessionKey, session), // persist after each resolved step
     });
+  } catch (err) {
+    if (err instanceof ResponseTruncatedError) {
+      return 'الطلب كبير زايد، جرب تسويها على دفعات أصغر (مثلاً منتج أو منتجين في كل مرة).';
+    }
+    throw err;
   }
-
-  // If the response got cut off (hit the token limit) rather than ending
-  // cleanly, DON'T save it — a truncated response can contain a half-formed
-  // tool_use block with no way to resolve it, which is exactly what
-  // corrupted the conversation before. Better to drop this turn and ask the
-  // owner to try again with a smaller request.
-  if (response.stop_reason === 'max_tokens') {
-    return 'الطلب كبير زايد، جرب تسويها على دفعات أصغر (مثلاً منتج أو منتجين في كل مرة).';
-  }
-
-  const finalText = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n')
-    .trim();
-
-  session.history.push({ role: 'assistant', content: response.content });
-  saveSession(sessionKey, session);
-
-  return finalText;
 }
 
 module.exports = { handleAdminMessage };
